@@ -3,8 +3,11 @@ import ProtectedRoute from '../components/ProtectedRoute';
 import PublicRoute from '../components/PublicRoute';
 import Home from '../pages/Home';
 import Login from '../pages/Login';
+import Register from '../pages/Register';
 import CreateOrder from '../pages/CreateOrder';
 import OrderList from '../pages/OrderList';
+import RepairRequest from '../pages/RepairRequest';
+import Profile from '../pages/Profile';
 
 // 路由配置
 export const router = createBrowserRouter([
@@ -37,6 +40,14 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: '/repair/request',
+    element: (
+      <ProtectedRoute>
+        <RepairRequest />
+      </ProtectedRoute>
+    )
+  },
+  {
     path: '/order/detail/:id',
     element: (
       <ProtectedRoute>
@@ -64,12 +75,7 @@ export const router = createBrowserRouter([
     path: '/profile',
     element: (
       <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">个人中心</h2>
-            <p className="text-gray-600">此页面正在开发中...</p>
-          </div>
-        </div>
+        <Profile />
       </ProtectedRoute>
     )
   },
@@ -77,12 +83,7 @@ export const router = createBrowserRouter([
     path: '/register',
     element: (
       <PublicRoute>
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">用户注册</h2>
-            <p className="text-gray-600">此页面正在开发中...</p>
-          </div>
-        </div>
+        <Register />
       </PublicRoute>
     )
   },

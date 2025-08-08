@@ -10,6 +10,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('User not authenticated', 401);
   }
 
+  console.log('接收到的订单创建请求数据:', req.body);
+
   const {
     serviceId,
     deviceType,
@@ -17,12 +19,36 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     issueDescription,
     urgencyLevel = 'normal',
     preferredTime,
-    contactAddress,
-    contactPhone
+    contactPhone,
+    contactAddress
   }: CreateOrderRequest = req.body;
 
+  console.log('解构后的字段:', {
+    serviceId,
+    deviceType,
+    deviceModel,
+    issueDescription,
+    urgencyLevel,
+    preferredTime,
+    contactPhone,
+    contactAddress
+  });
+
+  console.log('必填字段验证:', {
+    serviceId: !!serviceId,
+    deviceType: !!deviceType,
+    issueDescription: !!issueDescription,
+    contactPhone: !!contactPhone
+  });
+
   // 验证必填字段
-  if (!serviceId || !deviceType || !deviceModel || !issueDescription || !contactAddress || !contactPhone) {
+  if (!serviceId || !deviceType || !issueDescription || !contactPhone) {
+    console.log('缺失的必填字段:', {
+      serviceId: !serviceId ? 'missing' : 'ok',
+      deviceType: !deviceType ? 'missing' : 'ok',
+      issueDescription: !issueDescription ? 'missing' : 'ok',
+      contactPhone: !contactPhone ? 'missing' : 'ok'
+    });
     throw new AppError('Missing required fields', 400);
   }
 
@@ -53,8 +79,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       issue_description: issueDescription,
       urgency_level: urgencyLevel,
       preferred_time: preferredTime,
-      contact_address: contactAddress,
       contact_phone: contactPhone,
+      contact_address: contactAddress || '待确认',
       status: OrderStatus.PENDING,
       estimated_price: service.base_price
     })

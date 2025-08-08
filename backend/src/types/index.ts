@@ -134,14 +134,15 @@ export interface LoginResponse {
 
 // 创建订单请求接口
 export interface CreateOrderRequest {
-  serviceType: string;
-  description: string;
-  urgency: 'low' | 'medium' | 'high' | 'urgent';
-  contactName: string;
+  serviceId: string;
+  deviceType: string;
+  deviceModel?: string;
+  issueDescription: string;
+  urgencyLevel?: 'low' | 'medium' | 'high' | 'urgent' | 'normal';
+  preferredTime?: string;
   contactPhone: string;
-  address: string;
+  contactAddress?: string;
   images?: string[];
-  estimatedPrice: number;
 }
 
 // 更新订单状态请求接口

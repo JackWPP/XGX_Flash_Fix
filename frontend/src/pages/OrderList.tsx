@@ -22,6 +22,8 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useOrderStore } from '../store/orderStore';
+import { getServiceMappingByDatabaseId, getServiceMappingByName } from '../utils/serviceMapping';
+import api from '../utils/axios';
 
 // 本地类型定义
 type OrderStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled' | 'paid';
@@ -49,6 +51,29 @@ interface Service {
   updatedAt: string;
 }
 
+// 后端返回的原始订单数据结构（数据库字段名）
+interface RawOrder {
+  id: string;
+  order_number?: string;
+  user_id: string;
+  service_id?: string;
+  device_type: string;
+  device_model?: string;
+  issue_description: string;
+  urgency_level: string;
+  status: OrderStatus;
+  estimated_price?: number;
+  actual_price?: number;
+  contact_phone?: string;
+  contact_address?: string;
+  created_at: string;
+  updated_at: string;
+  services?: Service;
+  users?: User;
+  technicians?: User;
+}
+
+// 前端使用的订单数据结构
 interface Order {
   id: string;
   orderNo?: string;
@@ -92,18 +117,19 @@ const statusConfig = {
   paid: { color: 'green', text: '已支付' }
 };
 
-// 紧急程度配置
+// 紧急程度配置 - 与数据库字段值保持一致
 const urgencyConfig = {
   low: { color: 'default', text: '不紧急' },
-  medium: { color: 'blue', text: '一般' },
+  normal: { color: 'blue', text: '一般' },
   high: { color: 'orange', text: '紧急' },
   urgent: { color: 'red', text: '特急' }
 };
 
 const OrderList: React.FC = () => {
   const navigate = useNavigate();
-  const { orders, isLoading, fetchOrders, updateOrderStatus } = useOrderStore();
+  const { isLoading, updateOrderStatus } = useOrderStore();
 
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
@@ -112,12 +138,60 @@ const OrderList: React.FC = () => {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
 
-  useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+  // 数据转换函数：将后端返回的数据转换为前端期望的格式
+  const transformOrderData = (rawOrder: RawOrder): Order => {
+    return {
+      id: rawOrder.id,
+      orderNo: rawOrder.order_number,
+      userId: rawOrder.user_id,
+      serviceId: rawOrder.service_id,
+      serviceType: rawOrder.services?.name || '未知服务',
+      deviceModel: rawOrder.device_model || '未知设备',
+      description: rawOrder.issue_description || '无描述',
+      images: [], // 暂时为空数组
+      urgency: rawOrder.urgency_level,
+      status: rawOrder.status,
+      estimatedPrice: rawOrder.estimated_price,
+      finalPrice: rawOrder.actual_price,
+      contactPhone: rawOrder.contact_phone,
+      address: rawOrder.contact_address,
+      createdAt: rawOrder.created_at,
+      updatedAt: rawOrder.updated_at,
+      user: rawOrder.users,
+      service: rawOrder.services,
+      assignedUser: rawOrder.technicians
+    };
+  };
 
   useEffect(() => {
-    let filtered = orders;
+    const fetchAndTransformOrders = async () => {
+      try {
+        // 使用axios实例调用API，确保请求发送到正确的后端服务器
+        const response = await api.get('/api/v1/orders?page=1&limit=100');
+        
+        console.log('API响应:', response.data); // 添加调试日志
+        
+        if (response.data.success && response.data.data) {
+          // 转换数据格式
+          const transformedOrders = response.data.data.map((rawOrder: RawOrder) => transformOrderData(rawOrder));
+          console.log('转换后的订单数据:', transformedOrders); // 添加调试日志
+          // 设置到allOrders状态
+          setAllOrders(transformedOrders);
+        } else {
+          console.warn('API返回格式异常:', response.data);
+          message.error('获取订单数据失败');
+        }
+      } catch (error) {
+        console.error('获取订单失败:', error);
+        message.error('网络请求失败，请检查网络连接');
+      }
+    };
+    
+    fetchAndTransformOrders();
+  }, []);
+
+  useEffect(() => {
+    let filtered = allOrders;
 
     // 状态筛选
     if (statusFilter !== 'all') {
@@ -134,7 +208,7 @@ const OrderList: React.FC = () => {
     }
 
     setFilteredOrders(filtered);
-  }, [orders, statusFilter, searchText]);
+  }, [allOrders, statusFilter, searchText]);
 
   // 查看订单详情
   const handleViewOrder = (orderId: string) => {
@@ -150,7 +224,13 @@ const OrderList: React.FC = () => {
         try {
           await updateOrderStatus(orderId, 'cancelled');
           message.success('订单已取消');
-          fetchOrders();
+          // 重新获取订单列表
+          const response = await api.get('/api/v1/orders?page=1&limit=100');
+          
+          if (response.data.success && response.data.data) {
+            const transformedOrders = response.data.data.map((rawOrder: RawOrder) => transformOrderData(rawOrder));
+            setAllOrders(transformedOrders);
+          }
         } catch {
           message.error('取消订单失败');
         }
@@ -197,16 +277,15 @@ const OrderList: React.FC = () => {
       dataIndex: 'serviceType',
       key: 'serviceType',
       width: 120,
-      render: (serviceType: string) => {
-        const serviceMap: { [key: string]: string } = {
-          'system-reinstall': '系统重装',
-          'cleaning': '清灰服务',
-          'software-install': '软件安装',
-          'water-damage': '电脑进水',
-          'battery-replacement': '手机电池更换',
-          'screen-replacement': '手机屏幕更换'
-        };
-        return serviceMap[serviceType] || serviceType;
+      render: (serviceType: string, record: Order) => {
+        // 使用服务映射函数来获取正确的服务名称
+        if (record.serviceId) {
+          const serviceMapping = getServiceMappingByDatabaseId(record.serviceId);
+          return serviceMapping?.name || serviceType || '未知服务';
+        }
+        // 如果没有serviceId，尝试通过服务名称获取映射
+        const serviceMapping = getServiceMappingByName(serviceType);
+        return serviceMapping?.name || serviceType || '未知服务';
       }
     },
     {
@@ -239,6 +318,10 @@ const OrderList: React.FC = () => {
       width: 100,
       render: (urgency: string) => {
         const config = urgencyConfig[urgency as keyof typeof urgencyConfig];
+        // 添加容错处理，避免undefined错误
+        if (!config) {
+          return <Tag color="default">{urgency || '未知'}</Tag>;
+        }
         return <Tag color={config.color}>{config.text}</Tag>;
       }
     },
@@ -316,7 +399,28 @@ const OrderList: React.FC = () => {
               </Button>
               <Button
                 icon={<ReloadOutlined />}
-                onClick={() => fetchOrders()}
+                onClick={() => {
+                  const fetchAndTransformOrders = async () => {
+                    try {
+                      const response = await api.get('/api/v1/orders?page=1&limit=100');
+                      
+                      console.log('刷新API响应:', response.data);
+                      
+                      if (response.data.success && response.data.data) {
+                        const transformedOrders = response.data.data.map((rawOrder: RawOrder) => transformOrderData(rawOrder));
+                        setAllOrders(transformedOrders);
+                        message.success('订单列表已刷新');
+                      } else {
+                        console.warn('刷新API返回格式异常:', response.data);
+                        message.error('刷新订单数据失败');
+                      }
+                    } catch (error) {
+                      console.error('刷新订单失败:', error);
+                      message.error('刷新失败，请检查网络连接');
+                    }
+                  };
+                  fetchAndTransformOrders();
+                }}
                 loading={isLoading}
               >
                 刷新

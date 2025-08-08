@@ -51,15 +51,14 @@ interface Order {
 }
 
 interface CreateOrderRequest {
-  serviceType: string;
+  serviceId: string;
+  deviceType: string;
   deviceModel?: string;
-  description: string;
-  images?: string[];
-  urgency?: string;
-  contactName?: string;
+  issueDescription: string;
+  urgencyLevel?: string;
+  contactAddress?: string;
   contactPhone?: string;
-  address?: string;
-  estimatedPrice?: number;
+  images?: string[];
 }
 
 interface CreateOrderResponse {
@@ -133,10 +132,12 @@ export const useOrderStore = create<OrderState>()((set, get) => ({
         throw new Error('获取订单列表失败');
       }
     } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message || '获取订单列表失败';
       set({
         orders: [],
         isLoading: false,
-        error: (error as any)?.response?.data?.message || (error as any)?.message || '获取订单列表失败'
+        error: errorMessage
       });
       throw error;
     }
@@ -147,7 +148,7 @@ export const useOrderStore = create<OrderState>()((set, get) => ({
       set({ isLoading: true, error: null });
       
       const response = await api.get<{ success: boolean; data: Order }>(
-        `/api/orders/${id}`
+        `/api/v1/orders/${id}`
       );
       
       if (response.data.success) {
@@ -160,10 +161,12 @@ export const useOrderStore = create<OrderState>()((set, get) => ({
         throw new Error('获取订单详情失败');
       }
     } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message || '获取订单详情失败';
       set({
         currentOrder: null,
         isLoading: false,
-        error: (error as any)?.response?.data?.message || (error as any)?.message || '获取订单详情失败'
+        error: errorMessage
       });
       throw error;
     }
@@ -187,9 +190,11 @@ export const useOrderStore = create<OrderState>()((set, get) => ({
         throw new Error('创建订单失败');
       }
     } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message || '创建订单失败';
       set({
         isLoading: false,
-        error: (error as any)?.response?.data?.message || (error as any)?.message || '创建订单失败'
+        error: errorMessage
       });
       throw error;
     }
@@ -199,7 +204,7 @@ export const useOrderStore = create<OrderState>()((set, get) => ({
     try {
       set({ isLoading: true, error: null });
       
-      const response = await api.patch(`/api/orders/${orderId}/status`, { status, notes });
+      const response = await api.patch(`/api/v1/orders/${orderId}/status`, { status, notes });
       
       if (response.data.success) {
         // 更新本地状态
@@ -223,9 +228,11 @@ export const useOrderStore = create<OrderState>()((set, get) => ({
         throw new Error('更新订单状态失败');
       }
     } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message || '更新订单状态失败';
       set({
         isLoading: false,
-        error: (error as any)?.response?.data?.message || (error as any)?.message || '更新订单状态失败'
+        error: errorMessage
       });
       throw error;
     }

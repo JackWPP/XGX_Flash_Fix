@@ -93,6 +93,14 @@ const Home: React.FC = () => {
     }
   };
 
+  const handleRepairRequest = () => {
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: { pathname: '/repair/request' } } });
+    } else {
+      navigate('/repair/request');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* 头部导航 */}
@@ -156,10 +164,36 @@ const Home: React.FC = () => {
           </Card>
         </div>
 
+        {/* 报修服务区域 */}
+        <div className="mb-12">
+          <Card className="bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-200">
+            <div className="text-center">
+              <div className="mb-4">
+                <ToolOutlined className="text-4xl text-orange-600" />
+              </div>
+              <Title level={3} className="text-orange-800 mb-4">
+                设备故障？不知道选什么服务？
+              </Title>
+              <Paragraph className="text-gray-700 mb-6 text-lg">
+                直接描述您的设备故障，我们的专业技术员将为您诊断并提供最适合的解决方案
+              </Paragraph>
+              <Button
+                type="primary"
+                size="large"
+                onClick={handleRepairRequest}
+                className="bg-gradient-to-r from-orange-500 to-red-500 border-0 px-8 py-2 h-auto text-lg"
+              >
+                <ToolOutlined className="mr-2" />
+                立即报修
+              </Button>
+            </div>
+          </Card>
+        </div>
+
         {/* 服务项目 */}
         <div className="mb-12">
           <Title level={2} className="text-center mb-8">
-            服务项目
+            或选择具体服务项目
           </Title>
           <Row gutter={[24, 24]}>
             {services.map((service) => (

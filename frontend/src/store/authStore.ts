@@ -19,10 +19,30 @@ interface LoginRequest {
   role?: UserRole;
 }
 
+interface RegisterRequest {
+  name: string;
+  phone: string;
+  password: string;
+  role: UserRole;
+}
+
 interface LoginResponse {
   success: boolean;
-  token: string;
-  user: User;
+  data: {
+    token: string;
+    user: User;
+  };
+}
+
+interface RegisterResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    id: string;
+    name: string;
+    phone: string;
+    role: UserRole;
+  };
 }
 import api from '../utils/axios';
 
@@ -35,6 +55,7 @@ interface AuthState {
   
   // Actions
   login: (credentials: LoginRequest) => Promise<void>;
+  register: (userData: RegisterRequest) => Promise<void>;
   logout: () => void;
   clearError: () => void;
   setLoading: (loading: boolean) => void;
@@ -55,7 +76,7 @@ export const useAuthStore = create<AuthState>()(persist(
         const response = await api.post<LoginResponse>('/api/v1/auth/login', credentials);
         
         if (response.data.success) {
-          const { token, user } = response.data;
+          const { token, user } = response.data.data;
           
           set({
             user,
@@ -68,12 +89,39 @@ export const useAuthStore = create<AuthState>()(persist(
           throw new Error('登录失败');
         }
       } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 
+          (error as { response?: { data?: { message?: string } } })?.response?.data?.message || '登录失败';
         set({
           user: null,
           token: null,
           isAuthenticated: false,
           isLoading: false,
-          error: (error as any)?.response?.data?.message || (error as any)?.message || '登录失败'
+          error: errorMessage
+        });
+        throw error;
+      }
+    },
+
+    register: async (userData: RegisterRequest) => {
+      try {
+        set({ isLoading: true, error: null });
+        
+        const response = await api.post<RegisterResponse>('/api/v1/auth/register', userData);
+        
+        if (response.data.success) {
+          set({
+            isLoading: false,
+            error: null
+          });
+        } else {
+          throw new Error(response.data.message || '注册失败');
+        }
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 
+          (error as { response?: { data?: { message?: string } } })?.response?.data?.message || '注册失败';
+        set({
+          isLoading: false,
+          error: errorMessage
         });
         throw error;
       }
