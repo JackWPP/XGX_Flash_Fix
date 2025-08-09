@@ -9,6 +9,7 @@
 ### 主要功能
 
 #### 用户端
+
 - 🔐 用户注册与登录
 - 📱 设备维修预约（手机、电脑等）
 - 📋 订单状态跟踪
@@ -18,6 +19,7 @@
 - 🏠 首页展示和服务浏览
 
 #### 技师端
+
 - 🔧 接单管理
 - 📊 工作台面板
 - 📝 维修进度更新
@@ -25,6 +27,7 @@
 - 📱 移动端适配
 
 #### 管理端
+
 - 👥 用户管理（用户、技师、管理员、财务）
 - 🛠️ 服务项目管理
 - 📈 订单管理和分配
@@ -32,9 +35,31 @@
 - 📊 数据统计和报表
 - 🔐 权限管理
 
+## 📚 文档
+
+### 开发文档
+
+- [开发指南](./docs/开发指南.md) - 项目搭建、开发规范、常见问题
+- [技术架构文档](./docs/技术架构文档.md) - 系统架构设计和技术选型
+- [开发文档](./docs/开发文档.md) - 详细的开发说明和更新日志
+- [API文档](./docs/API文档.md) - 完整的后端API接口文档
+
+### 项目文档
+
+- [产品需求文档](./docs/产品需求文档.md) - 产品功能需求和业务逻辑
+- [变更日志](./docs/CHANGELOG.md) - 版本更新历史和变更记录
+
+### 快速导航
+
+- 🚀 [快速开始](#-快速开始) - 环境搭建和项目启动
+- 🔧 [开发指南](./docs/开发指南.md#开发服务器启动) - 开发环境配置
+- 📖 [API文档](./docs/API文档.md) - 接口调用说明
+- 🐛 [常见问题](./docs/开发指南.md#常见问题和故障排除) - 问题排查和解决方案
+
 ## 技术栈
 
 ### 前端
+
 - **React 18** - 现代化的用户界面框架，支持并发特性
 - **TypeScript 5.x** - 类型安全的JavaScript超集
 - **Ant Design 5.x** - 企业级UI设计语言和组件库
@@ -45,6 +70,7 @@
 - **Vite 5.x** - 快速的前端构建工具
 
 ### 后端
+
 - **Node.js 18+** - JavaScript运行时环境
 - **Express.js 4.x** - 成熟稳定的Web应用框架
 - **TypeScript 5.x** - 服务端类型安全开发
@@ -58,6 +84,7 @@
 - **Multer** - 多部分表单数据和文件上传处理
 
 ### 开发工具
+
 - **ESLint** - 代码质量检查
 - **TSX** - TypeScript执行器
 - **Git** - 版本控制
@@ -161,74 +188,152 @@ XGX_Flash_Fix/
 ### 安装步骤
 
 1. **克隆项目**
+
    ```bash
    git clone https://github.com/your-username/XGX_Flash_Fix.git
    cd XGX_Flash_Fix
    ```
-
 2. **安装依赖**
+
    ```bash
    # 安装根目录依赖
    npm install
-   
+
    # 安装前端依赖
    cd frontend
    npm install
-   
+
    # 安装后端依赖
    cd ../backend
    npm install
    ```
-
 3. **Supabase配置**
-   
+
    - 在 [Supabase](https://supabase.com) 创建新项目
    - 获取项目URL和API密钥
    - 运行数据库迁移文件（在Supabase SQL编辑器中执行 `supabase/migrations/` 下的SQL文件）
-
 4. **环境配置**
-   
+
    在 `backend` 目录下创建 `.env` 文件：
+
    ```env
    # 数据库配置
    SUPABASE_URL=your_supabase_project_url
    SUPABASE_ANON_KEY=your_supabase_anon_key
    SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-   
+
    # JWT配置
    JWT_SECRET=your_jwt_secret_key
-   
+
    # 服务器配置
    PORT=3001
    NODE_ENV=development
-   
+
    # CORS配置
    FRONTEND_URL=http://localhost:5173
    ```
-
 5. **启动服务**
+
    ```bash
    # 启动后端服务
    cd backend
    npm run dev
-   
+
    # 启动前端服务（新终端）
    cd frontend
    npm run dev
    ```
-
 6. **访问应用**
+
    - 前端应用：http://localhost:5173
    - 后端API：http://localhost:3001
 
 ### 默认账号
 
 系统预置了以下测试账号：
+
 - **管理员账号**：email: `admin@xgx.com`, password: `admin123`
 - **财务人员账号**：email: `finance@xgx.com`, password: `finance123`
 - **普通用户账号**：可通过注册页面自行创建
 
 > 注意：生产环境部署时请务必修改默认密码以确保安全性。
+
+## 最新开发进展
+
+### 已完成功能
+
+#### 用户认证系统 ✅
+
+- 用户注册、登录、登出功能
+- JWT token认证机制
+- 角色权限控制（用户、技师、管理员、财务）
+- 路由保护和权限验证
+
+#### 订单管理系统 ✅
+
+- 订单创建和提交
+- 订单状态跟踪（待处理、已指派、进行中、已完成、已取消）
+- 订单列表查看和筛选
+- 订单详情页面（开发中）
+- 技师指派功能
+
+#### 管理后台 ✅
+
+- 管理员仪表盘数据统计
+- 用户管理（查看、编辑用户信息）
+- 订单管理（查看、状态更新、技师指派）
+- 服务项目管理
+- 最近订单展示
+
+#### 技师工作台 ✅
+
+- 技师专用仪表盘
+- 分配订单查看
+- 订单状态更新
+
+#### 响应式UI设计 ✅
+
+- 基于Ant Design的现代化界面
+- 移动端适配
+- 暗色主题支持
+
+### 最近修复的问题
+
+#### 2025-01-08 修复记录
+
+1. **订单指派接口错误** - 修正前端请求方法从POST改为PUT，与后端路由保持一致
+2. **订单详情按钮无响应** - 添加正确的路由跳转功能
+3. **仪表盘数据显示错误** - 修正字段映射，确保统计数据正确显示
+4. **useNavigate未定义错误** - 添加缺失的React Router导入
+5. **最近订单数据结构不匹配** - 修正订单号、客户名称、服务类型字段映射
+
+### 当前开发状态
+
+#### 功能完成度
+
+- 🟢 **用户认证**: 100% 完成
+- 🟢 **订单管理**: 90% 完成（详情页面待完善）
+- 🟢 **管理后台**: 95% 完成
+- 🟢 **技师工作台**: 85% 完成
+- 🟡 **支付系统**: 30% 完成（基础架构）
+- 🟡 **通知系统**: 20% 完成（基础架构）
+- 🔴 **评价系统**: 10% 完成（数据库设计）
+
+#### 已知问题
+
+- 订单详情页面显示"此页面正在开发中..."占位符
+- 支付功能尚未完全实现
+- 实时通知功能待开发
+- 文件上传功能需要完善
+
+### 下一步开发计划
+
+1. 完善订单详情页面功能
+2. 实现支付系统集成
+3. 开发实时通知功能
+4. 添加订单评价系统
+5. 完善文件上传和图片处理
+6. 优化移动端用户体验
 
 ### 构建生产版本
 
@@ -245,6 +350,7 @@ npm run build
 ## API文档
 
 ### 基础信息
+
 - 基础URL: `http://localhost:3001/api`
 - 认证方式: Bearer Token (JWT)
 - 响应格式: JSON
@@ -252,6 +358,7 @@ npm run build
 ### 认证相关
 
 #### 用户注册
+
 ```http
 POST /api/auth/register
 Content-Type: application/json
@@ -266,6 +373,7 @@ Content-Type: application/json
 ```
 
 **响应示例：**
+
 ```json
 {
   "success": true,
@@ -282,6 +390,7 @@ Content-Type: application/json
 ```
 
 #### 用户登录
+
 ```http
 POST /api/auth/login
 Content-Type: application/json
@@ -293,6 +402,7 @@ Content-Type: application/json
 ```
 
 **响应示例：**
+
 ```json
 {
   "success": true,
@@ -309,6 +419,7 @@ Content-Type: application/json
 ```
 
 #### 获取当前用户信息
+
 ```http
 GET /api/auth/me
 Authorization: Bearer <token>
@@ -317,12 +428,14 @@ Authorization: Bearer <token>
 ### 用户管理
 
 #### 获取用户列表（管理员）
+
 ```http
 GET /api/users
 Authorization: Bearer <token>
 ```
 
 #### 更新用户信息
+
 ```http
 PUT /api/users/:id
 Authorization: Bearer <token>
@@ -338,11 +451,13 @@ Content-Type: application/json
 ### 服务管理
 
 #### 获取服务列表
+
 ```http
 GET /api/services
 ```
 
 #### 创建服务（管理员）
+
 ```http
 POST /api/services
 Authorization: Bearer <token>
@@ -360,6 +475,7 @@ Content-Type: application/json
 ### 订单相关
 
 #### 创建订单
+
 ```http
 POST /api/orders
 Authorization: Bearer <token>
@@ -377,6 +493,7 @@ Content-Type: application/json
 ```
 
 **响应示例：**
+
 ```json
 {
   "success": true,
@@ -390,18 +507,21 @@ Content-Type: application/json
 ```
 
 #### 获取订单列表
+
 ```http
 GET /api/orders?status=pending&page=1&limit=10
 Authorization: Bearer <token>
 ```
 
 #### 获取订单详情
+
 ```http
 GET /api/orders/:id
 Authorization: Bearer <token>
 ```
 
 #### 更新订单状态
+
 ```http
 PUT /api/orders/:id/status
 Authorization: Bearer <token>
@@ -415,6 +535,7 @@ Content-Type: application/json
 ```
 
 #### 取消订单
+
 ```http
 PUT /api/orders/:id/cancel
 Authorization: Bearer <token>
@@ -430,6 +551,7 @@ Content-Type: application/json
 项目使用Supabase作为数据库服务，基于PostgreSQL。主要数据表结构如下：
 
 ### 用户表 (users)
+
 ```sql
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -446,6 +568,7 @@ CREATE TABLE users (
 ```
 
 ### 服务项目表 (services)
+
 ```sql
 CREATE TABLE services (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -461,6 +584,7 @@ CREATE TABLE services (
 ```
 
 ### 订单表 (orders)
+
 ```sql
 CREATE TABLE orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -483,6 +607,7 @@ CREATE TABLE orders (
 ```
 
 ### 订单状态历史表 (order_status_history)
+
 ```sql
 CREATE TABLE order_status_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -496,6 +621,7 @@ CREATE TABLE order_status_history (
 ```
 
 ### 支付记录表 (payments)
+
 ```sql
 CREATE TABLE payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -511,6 +637,7 @@ CREATE TABLE payments (
 ```
 
 ### 评价记录表 (reviews)
+
 ```sql
 CREATE TABLE reviews (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -523,6 +650,7 @@ CREATE TABLE reviews (
 ```
 
 ### 索引和约束
+
 ```sql
 -- 创建索引提高查询性能
 CREATE INDEX idx_orders_user_id ON orders(user_id);
@@ -556,12 +684,14 @@ CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON orders
 ### 生产环境部署
 
 #### 1. 服务器要求
+
 - Node.js >= 18.0.0
 - PM2（进程管理器）
 - Nginx（反向代理）
 - SSL证书（HTTPS）
 
 #### 2. 构建项目
+
 ```bash
 # 构建前端
 cd frontend
@@ -573,7 +703,9 @@ npm run build
 ```
 
 #### 3. 环境变量配置
+
 生产环境 `.env` 配置：
+
 ```env
 NODE_ENV=production
 SUPABASE_URL=your_production_supabase_url
@@ -585,7 +717,9 @@ FRONTEND_URL=https://your-domain.com
 ```
 
 #### 4. PM2部署配置
+
 创建 `ecosystem.config.js`：
+
 ```javascript
 module.exports = {
   apps: [{
@@ -603,6 +737,7 @@ module.exports = {
 ```
 
 #### 5. Nginx配置
+
 ```nginx
 server {
     listen 80;
@@ -613,16 +748,16 @@ server {
 server {
     listen 443 ssl http2;
     server_name your-domain.com;
-    
+  
     ssl_certificate /path/to/certificate.crt;
     ssl_certificate_key /path/to/private.key;
-    
+  
     # 前端静态文件
     location / {
         root /path/to/frontend/dist;
         try_files $uri $uri/ /index.html;
     }
-    
+  
     # 后端API
     location /api {
         proxy_pass http://localhost:3001;
@@ -639,6 +774,7 @@ server {
 ```
 
 #### 6. 启动服务
+
 ```bash
 # 使用PM2启动后端服务
 pm2 start ecosystem.config.js
@@ -647,165 +783,8 @@ pm2 start ecosystem.config.js
 sudo systemctl restart nginx
 ```
 
-### Docker部署（推荐）
-
-#### 1. 创建 Dockerfile
-**后端 Dockerfile:**
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY dist ./dist
-EXPOSE 3001
-CMD ["node", "dist/index.js"]
-```
-
-**前端 Dockerfile:**
-```dockerfile
-FROM nginx:alpine
-COPY dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/nginx.conf
-EXPOSE 80
-```
-
-#### 2. Docker Compose配置
-```yaml
-version: '3.8'
-services:
-  backend:
-    build: ./backend
-    ports:
-      - "3001:3001"
-    environment:
-      - NODE_ENV=production
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - JWT_SECRET=${JWT_SECRET}
-    restart: unless-stopped
-    
-  frontend:
-    build: ./frontend
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-    restart: unless-stopped
-```
-
-## 开发规范
-
-### 代码规范
-- **TypeScript**: 所有代码使用TypeScript编写
-- **ESLint**: 遵循项目ESLint配置
-- **Prettier**: 使用Prettier进行代码格式化
-- **命名规范**:
-  - 组件: PascalCase (如 `UserProfile`)
-  - 函数/变量: camelCase (如 `getUserInfo`)
-  - 常量: UPPER_SNAKE_CASE (如 `API_BASE_URL`)
-  - 文件名: kebab-case (如 `user-profile.tsx`)
-
-### 文件结构规范
-```
-src/
-├── components/          # 可复用组件
-│   ├── common/         # 通用组件
-│   └── business/       # 业务组件
-├── pages/              # 页面组件
-├── hooks/              # 自定义Hook
-├── store/              # 状态管理
-├── utils/              # 工具函数
-├── types/              # 类型定义
-└── constants/          # 常量定义
-```
-
-### Git提交规范
-使用 [Conventional Commits](https://www.conventionalcommits.org/) 规范：
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-```
-
-**类型说明:**
-- `feat`: 新功能
-- `fix`: 修复bug
-- `docs`: 文档更新
-- `style`: 代码格式调整（不影响功能）
-- `refactor`: 代码重构
-- `perf`: 性能优化
-- `test`: 测试相关
-- `chore`: 构建过程或辅助工具的变动
-
-**示例:**
-```
-feat(auth): add user registration functionality
-fix(order): resolve order status update issue
-docs(readme): update installation instructions
-```
-
-### 分支管理策略
-- `main` - 主分支，用于生产环境，受保护
-- `develop` - 开发分支，用于集成测试
-- `feature/*` - 功能分支，从develop分出
-- `hotfix/*` - 热修复分支，从main分出
-- `release/*` - 发布分支，用于发布准备
-
-### 代码审查规范
-- 所有代码必须经过Code Review
-- PR必须通过CI/CD检查
-- 至少需要一个审查者批准
-- 确保测试覆盖率不低于80%
-
-## 测试策略
-
-### 前端测试
-```bash
-# 运行单元测试
-npm run test
-
-# 运行E2E测试
-npm run test:e2e
-
-# 生成测试覆盖率报告
-npm run test:coverage
-```
-
-### 后端测试
-```bash
-# 运行API测试
-npm run test:api
-
-# 运行集成测试
-npm run test:integration
-```
-
-## 性能监控
-
-### 前端性能
-- 使用Lighthouse进行性能审计
-- 监控Core Web Vitals指标
-- 使用React DevTools分析组件性能
-
-### 后端性能
-- API响应时间监控
-- 数据库查询性能分析
-- 内存和CPU使用率监控
-
-## 贡献指南
-
-1. **Fork项目** - 点击右上角Fork按钮
-2. **创建分支** - `git checkout -b feature/amazing-feature`
-3. **提交代码** - `git commit -m 'feat: add amazing feature'`
-4. **推送分支** - `git push origin feature/amazing-feature`
-5. **创建PR** - 在GitHub上创建Pull Request
-6. **代码审查** - 等待维护者审查和反馈
-7. **合并代码** - 审查通过后合并到主分支
-
 ### 贡献者行为准则
+
 - 尊重所有贡献者
 - 提供建设性的反馈
 - 遵循项目的代码规范
@@ -815,12 +794,15 @@ npm run test:integration
 ## 常见问题
 
 ### Q: 如何重置数据库？
+
 A: 在Supabase控制台中重新运行迁移文件，或删除所有表后重新执行SQL脚本。
 
 ### Q: 前端无法连接后端API？
+
 A: 检查CORS配置和环境变量中的URL设置。
 
 ### Q: 如何添加新的用户角色？
+
 A: 修改数据库中users表的role字段约束，并更新相关的权限检查逻辑。
 
 ## 许可证
@@ -829,9 +811,8 @@ A: 修改数据库中users表的role字段约束，并更新相关的权限检�
 
 ## 联系方式
 
-- **项目维护者**: 新干线闪修团队
-- **技术支持**: tech@xgxflashfix.com
-- **商务合作**: business@xgxflashfix.com
+- **项目维护者**: JackWPP
+- **技术支持**: jt846962421@gmail.com
 - **项目地址**: [https://github.com/your-username/XGX_Flash_Fix](https://github.com/your-username/XGX_Flash_Fix)
 
 ---
@@ -840,7 +821,8 @@ A: 修改数据库中users表的role字段约束，并更新相关的权限检�
 
 ## 更新日志
 
-### v1.0.0 (2025-01-08)
+### v1.0.0 (2025-08-08)
+
 - 初始版本发布
 - 实现基础的用户认证功能
 - 实现订单管理功能
