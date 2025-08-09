@@ -14,7 +14,8 @@ import {
   Switch,
   Select,
 } from 'antd';
-import { useServiceStore, Service } from '../../store/serviceStore';
+import { useServiceStore } from '../../store/serviceStore';
+import type { Service } from '../../store/serviceStore';
 import type { TableProps } from 'antd';
 
 const { Title } = Typography;

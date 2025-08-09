@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Table,
   Typography,
@@ -15,7 +16,8 @@ import {
   DatePicker,
 } from 'antd';
 import { useOrderStore } from '../../store/orderStore';
-import { useUserStore, User } from '../../store/userStore';
+import { useUserStore } from '../../store/userStore';
+import type { User } from '../../store/userStore';
 import type { TableProps } from 'antd';
 
 const { Title } = Typography;
@@ -44,6 +46,7 @@ const statusColor: Record<OrderStatus, string> = {
 };
 
 const OrderManagement: React.FC = () => {
+  const navigate = useNavigate();
   const { orders, total, isLoading, fetchOrders, assignTechnician } = useOrderStore();
   const { users: technicians, fetchUsers: fetchTechnicians } = useUserStore();
   
@@ -111,7 +114,7 @@ const OrderManagement: React.FC = () => {
       key: 'action',
       render: (_, record) => (
         <Space>
-          <Button type="link">详情</Button>
+          <Button type="link" onClick={() => navigate(`/order/detail/${record.id}`)}>详情</Button>
           {record.status === 'pending' && (
             <Button type="link" onClick={() => handleAssign(record)}>
               指派

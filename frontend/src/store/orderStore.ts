@@ -243,7 +243,7 @@ export const useOrderStore = create<OrderState>()((set, get) => ({
   assignTechnician: async (orderId: string, technicianId: string) => {
     try {
       set({ isLoading: true, error: null });
-      const response = await api.post(`/api/v1/orders/${orderId}/assign`, { technicianId });
+      const response = await api.put(`/api/v1/orders/${orderId}/assign`, { technicianId });
       if (response.data.success) {
         const { fetchOrders, page, limit } = get();
         await fetchOrders({ page, limit }); // Refresh the list

@@ -13,7 +13,8 @@ import {
   Row,
   Col,
 } from 'antd';
-import { useUserStore, User } from '../../store/userStore';
+import { useUserStore } from '../../store/userStore';
+import type { User } from '../../store/userStore';
 import type { TableProps } from 'antd';
 
 const { Title } = Typography;
