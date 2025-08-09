@@ -13,7 +13,7 @@ export interface User {
 }
 
 // 订单状态类型
-export type OrderStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled' | 'paid';
+export type OrderStatus = 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
 
 // 订单紧急程度类型
 export type OrderUrgency = 'urgent' | 'normal';
@@ -33,29 +33,35 @@ export interface Service {
 // 订单类型
 export interface Order {
   id: string;
-  orderNo?: string;
-  userId: string;
-  serviceId?: string;
-  serviceType: string;
-  deviceModel?: string;
-  description: string;
-  images: string[];
-  urgency: string;
+  order_number: string;
+  user_id: string;
+  service_id: string;
+  technician_id?: string;
   status: OrderStatus;
-  quotedPrice?: number;
-  finalPrice?: number;
-  estimatedPrice?: number;
-  assignedTo?: string;
-  contactName?: string;
-  contactPhone?: string;
-  address?: string;
-  rating?: number;
-  createdAt: string;
-  updatedAt: string;
+  scheduled_time: string;
+  address: string;
+  final_price: number;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
   // 关联数据
-  user?: User;
-  service?: Service;
-  assignedUser?: User;
+  users: {
+    name: string;
+    phone: string;
+    email: string;
+  };
+  services: {
+    name: string;
+    description: string;
+    category: string;
+    base_price: number;
+    duration: number;
+  };
+  technicians?: {
+    name: string;
+    phone: string;
+    specialties?: string[];
+  };
 }
 
 // 支付状态类型

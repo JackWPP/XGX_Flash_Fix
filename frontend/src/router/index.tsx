@@ -12,6 +12,7 @@ import AdminDashboard from '../pages/AdminDashboard';
 import AdminLayout from '../components/layout/AdminLayout';
 import UserManagement from '../pages/admin/UserManagement';
 import OrderManagement from '../pages/admin/OrderManagement';
+import OrderDetail from '../pages/OrderDetail';
 import ServiceManagement from '../pages/admin/ServiceManagement';
 
 // 路由配置
@@ -51,6 +52,14 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: '/order/detail/:id',
+    element: (
+      <ProtectedRoute>
+        <OrderDetail />
+      </ProtectedRoute>
+    )
+  },
+  {
     path: '/order/list',
     element: (
       <ProtectedRoute>
@@ -63,19 +72,6 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <RepairRequest />
-      </ProtectedRoute>
-    )
-  },
-  {
-    path: '/order/detail/:id',
-    element: (
-      <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">订单详情页</h2>
-            <p className="text-gray-600">此页面正在开发中...</p>
-          </div>
-        </div>
       </ProtectedRoute>
     )
   },
