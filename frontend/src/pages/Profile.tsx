@@ -24,6 +24,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useOrderStore } from '../store/orderStore';
+import { useEffect } from 'react';
 
 const { Title, Text, Paragraph } = Typography;
 const { confirm } = Modal;
@@ -31,7 +32,14 @@ const { confirm } = Modal;
 const Profile: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const { orders } = useOrderStore();
+  const { orders, fetchOrders, isLoading } = useOrderStore();
+
+  useEffect(() => {
+    // 当用户信息加载后，获取该用户的订单列表
+    if (user) {
+      fetchOrders();
+    }
+  }, [user, fetchOrders]);
 
   // 计算订单统计
   const orderStats = {

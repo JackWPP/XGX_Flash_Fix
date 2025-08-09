@@ -86,10 +86,11 @@ interface OrderState {
   limit: number;
   
   // Actions
-  fetchOrders: (params?: { status?: string; page?: number; limit?: number }) => Promise<void>;
+  fetchOrders: (params?: { status?: string; page?: number; limit?: number; search?: string }) => Promise<void>;
   fetchOrderById: (id: string) => Promise<void>;
   createOrder: (orderData: CreateOrderRequest) => Promise<CreateOrderResponse>;
   updateOrderStatus: (orderId: string, status: string, notes?: string) => Promise<void>;
+  assignTechnician: (orderId: string, technicianId: string) => Promise<void>;
   clearError: () => void;
   setLoading: (loading: boolean) => void;
   clearCurrentOrder: () => void;
@@ -108,10 +109,11 @@ export const useOrderStore = create<OrderState>()((set, get) => ({
     try {
       set({ isLoading: true, error: null });
       
-      const { status, page = 1, limit = 10 } = params;
+      const { status, page = 1, limit = 10, search } = params;
       const queryParams = new URLSearchParams();
       
       if (status) queryParams.append('status', status);
+      if (search) queryParams.append('search', search);
       queryParams.append('page', page.toString());
       queryParams.append('limit', limit.toString());
       
@@ -234,6 +236,23 @@ export const useOrderStore = create<OrderState>()((set, get) => ({
         isLoading: false,
         error: errorMessage
       });
+      throw error;
+    }
+  },
+
+  assignTechnician: async (orderId: string, technicianId: string) => {
+    try {
+      set({ isLoading: true, error: null });
+      const response = await api.post(`/api/v1/orders/${orderId}/assign`, { technicianId });
+      if (response.data.success) {
+        const { fetchOrders, page, limit } = get();
+        await fetchOrders({ page, limit }); // Refresh the list
+        set({ isLoading: false });
+      } else {
+        throw new Error('Failed to assign technician');
+      }
+    } catch (error: any) {
+      set({ isLoading: false, error: error.message || 'An unknown error occurred' });
       throw error;
     }
   },

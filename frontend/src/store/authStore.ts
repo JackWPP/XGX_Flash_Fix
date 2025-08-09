@@ -54,7 +54,7 @@ interface AuthState {
   error: string | null;
   
   // Actions
-  login: (credentials: LoginRequest) => Promise<void>;
+  login: (credentials: LoginRequest) => Promise<User>;
   register: (userData: RegisterRequest) => Promise<void>;
   logout: () => void;
   clearError: () => void;
@@ -85,6 +85,7 @@ export const useAuthStore = create<AuthState>()(persist(
             isLoading: false,
             error: null
           });
+          return user; // 返回 user 对象
         } else {
           throw new Error('登录失败');
         }

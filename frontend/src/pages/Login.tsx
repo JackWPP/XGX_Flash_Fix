@@ -20,9 +20,15 @@ const Login: React.FC = () => {
   const handleSubmit = async (values: { phone: string; password: string; role: UserRole }) => {
     try {
       clearError();
-      await login(values);
+      const user = await login(values);
       message.success('登录成功');
-      navigate(from, { replace: true });
+      
+      // 根据角色重定向
+      if (user.role === 'admin') {
+        navigate('/admin/dashboard', { replace: true });
+      } else {
+        navigate(from, { replace: true });
+      }
     } catch {
       // 错误已在store中处理
     }

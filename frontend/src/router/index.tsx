@@ -8,12 +8,31 @@ import CreateOrder from '../pages/CreateOrder';
 import OrderList from '../pages/OrderList';
 import RepairRequest from '../pages/RepairRequest';
 import Profile from '../pages/Profile';
+import AdminDashboard from '../pages/AdminDashboard';
+import AdminLayout from '../components/layout/AdminLayout';
+import UserManagement from '../pages/admin/UserManagement';
+import OrderManagement from '../pages/admin/OrderManagement';
+import ServiceManagement from '../pages/admin/ServiceManagement';
 
 // 路由配置
 export const router = createBrowserRouter([
   {
     path: '/',
     element: <Home />
+  },
+  {
+    path: '/admin',
+    element: (
+      <ProtectedRoute allowedRoles={['admin']}>
+        <AdminLayout />
+      </ProtectedRoute>
+    ),
+    children: [
+      { path: 'dashboard', element: <AdminDashboard /> },
+      { path: 'users', element: <UserManagement /> },
+      { path: 'orders', element: <OrderManagement /> },
+      { path: 'services', element: <ServiceManagement /> },
+    ]
   },
   {
     path: '/login',
