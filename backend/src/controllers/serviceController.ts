@@ -80,17 +80,17 @@ export const createService = asyncHandler(async (req: Request, res: Response) =>
     name,
     description,
     category,
-    basePrice,
-    estimatedDuration,
-    isActive = true
+    base_price,
+    estimated_duration,
+    is_active = true
   } = req.body;
 
   // 验证必填字段
-  if (!name || !description || !category || !basePrice) {
+  if (!name || !description || !category || base_price === undefined || base_price === null) {
     throw new AppError('Name, description, category, and base price are required', 400);
   }
 
-  if (basePrice < 0) {
+  if (base_price < 0) {
     throw new AppError('Base price must be non-negative', 400);
   }
 
@@ -101,9 +101,9 @@ export const createService = asyncHandler(async (req: Request, res: Response) =>
       name,
       description,
       category,
-      base_price: basePrice,
-      estimated_duration: estimatedDuration,
-      is_active: isActive
+      base_price,
+      estimated_duration,
+      is_active
     })
     .select()
     .single();
@@ -131,9 +131,9 @@ export const updateService = asyncHandler(async (req: Request, res: Response) =>
     name,
     description,
     category,
-    basePrice,
-    estimatedDuration,
-    isActive
+    base_price,
+    estimated_duration,
+    is_active
   } = req.body;
 
   const updateData: any = {
@@ -143,14 +143,14 @@ export const updateService = asyncHandler(async (req: Request, res: Response) =>
   if (name) updateData.name = name;
   if (description) updateData.description = description;
   if (category) updateData.category = category;
-  if (basePrice !== undefined) {
-    if (basePrice < 0) {
+  if (base_price !== undefined) {
+    if (base_price < 0) {
       throw new AppError('Base price must be non-negative', 400);
     }
-    updateData.base_price = basePrice;
+    updateData.base_price = base_price;
   }
-  if (estimatedDuration !== undefined) updateData.estimated_duration = estimatedDuration;
-  if (isActive !== undefined) updateData.is_active = isActive;
+  if (estimated_duration !== undefined) updateData.estimated_duration = estimated_duration;
+  if (is_active !== undefined) updateData.is_active = is_active;
 
   // 更新服务
   const { data: updatedService, error } = await supabase

@@ -10,10 +10,14 @@ import RepairRequest from '../pages/RepairRequest';
 import Profile from '../pages/Profile';
 import AdminDashboard from '../pages/AdminDashboard';
 import AdminLayout from '../components/layout/AdminLayout';
+import TechnicianLayout from '../components/layout/TechnicianLayout';
 import UserManagement from '../pages/admin/UserManagement';
 import OrderManagement from '../pages/admin/OrderManagement';
 import OrderDetail from '../pages/OrderDetail';
 import ServiceManagement from '../pages/admin/ServiceManagement';
+import TechnicianDashboard from '../pages/TechnicianDashboard';
+import TechnicianOrders from '../pages/technician/TechnicianOrders';
+import TechnicianProfile from '../pages/technician/TechnicianProfile';
 
 // 路由配置
 export const router = createBrowserRouter([
@@ -33,6 +37,19 @@ export const router = createBrowserRouter([
       { path: 'users', element: <UserManagement /> },
       { path: 'orders', element: <OrderManagement /> },
       { path: 'services', element: <ServiceManagement /> },
+    ]
+  },
+  {
+    path: '/technician',
+    element: (
+      <ProtectedRoute allowedRoles={['technician']}>
+        <TechnicianLayout />
+      </ProtectedRoute>
+    ),
+    children: [
+      { path: 'dashboard', element: <TechnicianDashboard /> },
+      { path: 'orders', element: <TechnicianOrders /> },
+      { path: 'profile', element: <TechnicianProfile /> },
     ]
   },
   {

@@ -26,6 +26,8 @@ const Login: React.FC = () => {
       // 根据角色重定向
       if (user.role === 'admin') {
         navigate('/admin/dashboard', { replace: true });
+      } else if (user.role === 'technician') {
+        navigate('/technician/dashboard', { replace: true });
       } else {
         navigate(from, { replace: true });
       }
