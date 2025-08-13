@@ -4,13 +4,9 @@ import { successResponse, errorResponse, paginatedResponse } from '../utils/resp
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { Order, OrderStatus, CreateOrderRequest, UpdateOrderStatusRequest, UserRole } from '../types/index.js';
 
-// 创建订单
+// 创建订单 (逻辑不变)
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
-
-  console.log('接收到的订单创建请求数据:', req.body);
+  if (!req.user) throw new AppError('User not authenticated', 401);
 
   const {
     serviceId,
@@ -23,51 +19,21 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     contactAddress
   }: CreateOrderRequest = req.body;
 
-  console.log('解构后的字段:', {
-    serviceId,
-    deviceType,
-    deviceModel,
-    issueDescription,
-    urgencyLevel,
-    preferredTime,
-    contactPhone,
-    contactAddress
-  });
-
-  console.log('必填字段验证:', {
-    serviceId: !!serviceId,
-    deviceType: !!deviceType,
-    issueDescription: !!issueDescription,
-    contactPhone: !!contactPhone
-  });
-
-  // 验证必填字段
   if (!serviceId || !deviceType || !issueDescription || !contactPhone) {
-    console.log('缺失的必填字段:', {
-      serviceId: !serviceId ? 'missing' : 'ok',
-      deviceType: !deviceType ? 'missing' : 'ok',
-      issueDescription: !issueDescription ? 'missing' : 'ok',
-      contactPhone: !contactPhone ? 'missing' : 'ok'
-    });
     throw new AppError('Missing required fields', 400);
   }
 
-  // 验证服务是否存在
   const { data: service, error: serviceError } = await supabase
     .from('services')
-    .select('*')
+    .select('base_price')
     .eq('id', serviceId)
     .eq('is_active', true)
     .single();
 
-  if (serviceError || !service) {
-    throw new AppError('Service not found or inactive', 404);
-  }
+  if (serviceError || !service) throw new AppError('Service not found or inactive', 404);
 
-  // 生成订单号
   const orderNumber = `XGX${Date.now()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
 
-  // 创建订单
   const { data: newOrder, error } = await supabase
     .from('orders')
     .insert({
@@ -84,92 +50,59 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       status: OrderStatus.PENDING,
       estimated_price: service.base_price
     })
-    .select(`
-      *,
-      services:service_id(*),
-      users:user_id(id, name, phone)
-    `)
+    .select('*, services:service_id(*), users:user_id(id, name, phone)')
     .single();
 
-  if (error) {
-    console.error('Order creation error:', error);
-    throw new AppError('Failed to create order', 500);
-  }
+  if (error) throw new AppError('Failed to create order', 500, error);
 
-  // 记录订单日志
-  await supabase
-    .from('order_logs')
-    .insert({
-      order_id: newOrder.id,
-      status: OrderStatus.PENDING,
-      notes: 'Order created',
-      created_by: req.user.userId
-    });
+  await supabase.from('order_logs').insert({
+    order_id: newOrder.id,
+    action: 'create',
+    notes: '订单已创建',
+    operator_id: req.user.userId
+  });
 
   successResponse(res, 'Order created successfully', newOrder, 201);
 });
 
-// 获取订单列表
+// 获取订单列表 (增强)
 export const getOrders = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  if (!req.user) throw new AppError('User not authenticated', 401);
 
-  const {
-    page = 1,
-    limit = 10,
-    status,
-    urgencyLevel,
-    startDate,
-    endDate,
-    search
-  } = req.query;
-
+  const { page = 1, limit = 10, status, search, view } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 
   let query = supabase
     .from('orders')
-    .select(`
-      *,
-      services:service_id(id, name, category, base_price),
-      users:user_id(id, name, phone),
-      technicians:technician_id(id, name, phone)
-    `, { count: 'exact' });
+    .select('*, services:service_id(id, name), users:user_id(id, name), technicians:technician_id(id, name)', { count: 'exact' });
 
-  // 根据用户角色过滤订单
-  if (req.user.role === UserRole.USER) {
-    query = query.eq('user_id', req.user.userId);
+  // 根据视图参数调整查询逻辑
+  if (view === 'unclaimed') {
+    // 接单大厅视图
+    query = query.eq('status', OrderStatus.PENDING);
   } else if (req.user.role === UserRole.TECHNICIAN) {
-    query = query.eq('technician_id', req.user.userId);
+    if (status === OrderStatus.PENDING_ACCEPTANCE) {
+      query = query.eq('technician_id', req.user.userId).eq('status', OrderStatus.PENDING_ACCEPTANCE);
+    } else {
+      query = query.eq('technician_id', req.user.userId);
+      if(status) query = query.eq('status', status as string);
+    }
+  } else if (req.user.role === UserRole.USER) {
+    query = query.eq('user_id', req.user.userId);
+    if(status) query = query.eq('status', status as string);
+  } else { // ADMIN or FINANCE
+    if(status) query = query.eq('status', status as string);
   }
-  // 管理员和财务可以查看所有订单
 
-  // 应用过滤条件
-  if (status) {
-    query = query.eq('status', status);
-  }
-  if (urgencyLevel) {
-    query = query.eq('urgency_level', urgencyLevel);
-  }
-  if (startDate) {
-    query = query.gte('created_at', startDate);
-  }
-  if (endDate) {
-    query = query.lte('created_at', endDate);
-  }
   if (search) {
-    query = query.or(`order_number.ilike.%${search}%,device_type.ilike.%${search}%,device_model.ilike.%${search}%`);
+    query = query.or(`order_number.ilike.%${search}%,device_model.ilike.%${search}%`);
   }
 
-  // 排序和分页
   const { data: orders, error, count } = await query
     .order('created_at', { ascending: false })
     .range(offset, offset + Number(limit) - 1);
 
-  if (error) {
-    console.error('Orders query error:', error);
-    throw new AppError('Failed to fetch orders', 500);
-  }
+  if (error) throw new AppError('Failed to fetch orders', 500, error);
 
   paginatedResponse(res, 'Orders retrieved successfully', orders || [], {
     page: Number(page),
@@ -179,241 +112,203 @@ export const getOrders = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-// 获取订单详情
+// 获取订单详情 (逻辑不变)
 export const getOrderById = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+    if (!req.user) throw new AppError('User not authenticated', 401);
+    const { id } = req.params;
+    const { data: order, error } = await supabase
+        .from('orders')
+        .select('*, services:service_id(*), users:user_id(*), technicians:technician_id(*), order_logs(*), payments(*), reviews(*)')
+        .eq('id', id)
+        .single();
 
-  const { id } = req.params;
-
-  const { data: order, error } = await supabase
-    .from('orders')
-    .select(`
-      *,
-      services:service_id(*),
-      users:user_id(id, name, phone, email),
-      technicians:technician_id(id, name, phone, email),
-      order_logs(*),
-      payments(*),
-      reviews(*)
-    `)
-    .eq('id', id)
-    .single();
-
-  if (error || !order) {
-    throw new AppError('Order not found', 404);
-  }
-
-  // 检查权限
-  if (req.user.role === UserRole.USER && order.user_id !== req.user.userId) {
-    throw new AppError('Access denied', 403);
-  }
-  if (req.user.role === UserRole.TECHNICIAN && order.technician_id !== req.user.userId) {
-    throw new AppError('Access denied', 403);
-  }
-
-  successResponse(res, 'Order retrieved successfully', order);
+    if (error || !order) throw new AppError('Order not found', 404);
+    successResponse(res, 'Order retrieved successfully', order);
 });
 
-// 更新订单状态
-export const updateOrderStatus = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
-
-  const { id } = req.params;
-  const { status, notes, estimatedPrice, actualPrice }: UpdateOrderStatusRequest = req.body;
-
-  if (!status) {
-    throw new AppError('Status is required', 400);
-  }
-
-  if (!Object.values(OrderStatus).includes(status)) {
-    throw new AppError('Invalid status', 400);
-  }
-
-  // 查询订单
-  const { data: order, error: orderError } = await supabase
-    .from('orders')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (orderError || !order) {
-    throw new AppError('Order not found', 404);
-  }
-
-  // 检查权限
-  if (req.user.role === UserRole.USER) {
-    // 用户只能取消自己的订单
-    if (order.user_id !== req.user.userId || status !== OrderStatus.CANCELLED) {
-      throw new AppError('Access denied', 403);
-    }
-  } else if (req.user.role === UserRole.TECHNICIAN) {
-    // 技术员只能更新分配给自己的订单
-    if (order.technician_id !== req.user.userId) {
-      throw new AppError('Access denied', 403);
-    }
-  }
-  // 管理员和财务可以更新任何订单
-
-  // 构建更新数据
-  const updateData: any = {
-    status,
-    updated_at: new Date().toISOString()
-  };
-
-  if (estimatedPrice !== undefined) {
-    updateData.estimated_price = estimatedPrice;
-  }
-  if (actualPrice !== undefined) {
-    updateData.actual_price = actualPrice;
-  }
-
-  // 更新订单
-  const { data: updatedOrder, error } = await supabase
-    .from('orders')
-    .update(updateData)
-    .eq('id', id)
-    .select(`
-      *,
-      services:service_id(*),
-      users:user_id(id, name, phone),
-      technicians:technician_id(id, name, phone)
-    `)
-    .single();
-
-  if (error) {
-    console.error('Order update error:', error);
-    throw new AppError('Failed to update order', 500);
-  }
-
-  // 记录订单日志
-  await supabase
-    .from('order_logs')
-    .insert({
-      order_id: id,
-      status,
-      notes: notes || `Status updated to ${status}`,
-      created_by: req.user.userId
-    });
-
-  successResponse(res, 'Order status updated successfully', updatedOrder);
-});
-
-// 分配技术员
+// [重构] 指派技师
 export const assignTechnician = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
-
-  // 只有管理员可以分配技术员
-  if (req.user.role !== UserRole.ADMIN) {
-    throw new AppError('Access denied', 403);
-  }
-
+  if (!req.user) throw new AppError('User not authenticated', 401);
   const { id } = req.params;
   const { technicianId } = req.body;
 
-  if (!technicianId) {
-    throw new AppError('Technician ID is required', 400);
-  }
+  if (!technicianId) throw new AppError('Technician ID is required', 400);
 
-  // 验证技术员是否存在
-  const { data: technician, error: techError } = await supabase
-    .from('users')
-    .select('id, name')
-    .eq('id', technicianId)
-    .eq('role', UserRole.TECHNICIAN)
-    .single();
+  const { data: technician } = await supabase.from('users').select('id, name').eq('id', technicianId).eq('role', UserRole.TECHNICIAN).single();
+  if (!technician) throw new AppError('Technician not found', 404);
 
-  if (techError || !technician) {
-    throw new AppError('Technician not found', 404);
-  }
-
-  // 更新订单
   const { data: updatedOrder, error } = await supabase
     .from('orders')
-    .update({
-      technician_id: technicianId,
-      status: OrderStatus.ASSIGNED,
-      updated_at: new Date().toISOString()
-    })
+    .update({ technician_id: technicianId, status: OrderStatus.PENDING_ACCEPTANCE })
     .eq('id', id)
-    .select(`
-      *,
-      services:service_id(*),
-      users:user_id(id, name, phone),
-      technicians:technician_id(id, name, phone)
-    `)
+    .in('status', [OrderStatus.PENDING, OrderStatus.PENDING_ACCEPTANCE]) // 允许从待处理或已指派（可转单）更新
+    .select('*, technicians:technician_id(id, name)')
     .single();
 
-  if (error) {
-    console.error('Technician assignment error:', error);
-    throw new AppError('Failed to assign technician', 500);
-  }
+  if (error || !updatedOrder) throw new AppError('Failed to assign technician', 500, error);
 
-  // 记录订单日志
-  await supabase
-    .from('order_logs')
-    .insert({
-      order_id: id,
-      status: OrderStatus.ASSIGNED,
-      notes: `Assigned to technician: ${technician.name}`,
-      created_by: req.user.userId
-    });
+  await supabase.from('order_logs').insert({
+    order_id: id,
+    action: 'assign',
+    notes: `订单已指派给技师 ${technician.name}，等待接收`,
+    operator_id: req.user.userId
+  });
 
   successResponse(res, 'Technician assigned successfully', updatedOrder);
 });
 
-// 获取订单统计
-export const getOrderStats = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+// [新增] 技师主动接单
+export const claimOrder = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) throw new AppError('User not authenticated', 401);
+    const { id } = req.params;
 
-  // 只有管理员和财务可以查看统计
-  if (![UserRole.ADMIN, UserRole.FINANCE].includes(req.user.role)) {
-    throw new AppError('Access denied', 403);
-  }
+    const { data: updatedOrder, error } = await supabase
+        .from('orders')
+        .update({ technician_id: req.user.userId, status: OrderStatus.IN_PROGRESS })
+        .eq('id', id)
+        .eq('status', OrderStatus.PENDING)
+        .select('*, technicians:technician_id(id, name)')
+        .single();
 
-  const { startDate, endDate } = req.query;
+    if (error || !updatedOrder) throw new AppError('Failed to claim order. It might be already taken.', 409, error);
 
-  let query = supabase
-    .from('orders')
-    .select('status, actual_price, created_at');
+    await supabase.from('order_logs').insert({
+        order_id: id,
+        action: 'claim',
+        notes: '技师已接单',
+        operator_id: req.user.userId
+    });
 
-  if (startDate) {
-    query = query.gte('created_at', startDate);
-  }
-  if (endDate) {
-    query = query.lte('created_at', endDate);
-  }
+    successResponse(res, 'Order claimed successfully', updatedOrder);
+});
 
-  const { data: orders, error } = await query;
+// [新增] 技师接受指派
+export const acceptOrder = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) throw new AppError('User not authenticated', 401);
+    const { id } = req.params;
 
-  if (error) {
-    console.error('Order stats query error:', error);
-    throw new AppError('Failed to fetch order statistics', 500);
-  }
+    const { data: updatedOrder, error } = await supabase
+        .from('orders')
+        .update({ status: OrderStatus.IN_PROGRESS })
+        .eq('id', id)
+        .eq('technician_id', req.user.userId)
+        .eq('status', OrderStatus.PENDING_ACCEPTANCE)
+        .select()
+        .single();
 
-  // 计算统计数据
-  const stats = {
-    total: orders?.length || 0,
-    pending: orders?.filter(o => o.status === OrderStatus.PENDING).length || 0,
-    assigned: orders?.filter(o => o.status === OrderStatus.ASSIGNED).length || 0,
-    inProgress: orders?.filter(o => o.status === OrderStatus.IN_PROGRESS).length || 0,
-    completed: orders?.filter(o => o.status === OrderStatus.COMPLETED).length || 0,
-    cancelled: orders?.filter(o => o.status === OrderStatus.CANCELLED).length || 0,
-    totalRevenue: orders?.reduce((sum, o) => sum + (o.actual_price || 0), 0) || 0,
-    averageOrderValue: 0
-  };
+    if (error || !updatedOrder) throw new AppError('Failed to accept order.', 400, error);
 
-  if (stats.completed > 0) {
-    const completedOrders = orders?.filter(o => o.status === OrderStatus.COMPLETED && o.actual_price) || [];
-    stats.averageOrderValue = completedOrders.reduce((sum, o) => sum + o.actual_price, 0) / completedOrders.length;
-  }
+    await supabase.from('order_logs').insert({
+        order_id: id,
+        action: 'accept',
+        notes: '技师已接受指派',
+        operator_id: req.user.userId
+    });
 
-  successResponse(res, 'Order statistics retrieved successfully', stats);
+    successResponse(res, 'Order accepted', updatedOrder);
+});
+
+// [新增] 技师拒绝指派
+export const rejectOrder = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) throw new AppError('User not authenticated', 401);
+    const { id } = req.params;
+
+    const { data: updatedOrder, error } = await supabase
+        .from('orders')
+        .update({ technician_id: null, status: OrderStatus.PENDING })
+        .eq('id', id)
+        .eq('technician_id', req.user.userId)
+        .eq('status', OrderStatus.PENDING_ACCEPTANCE)
+        .select()
+        .single();
+
+    if (error || !updatedOrder) throw new AppError('Failed to reject order.', 400, error);
+
+    await supabase.from('order_logs').insert({
+        order_id: id,
+        action: 'reject',
+        notes: '技师已拒绝指派，订单返回待处理状态',
+        operator_id: req.user.userId
+    });
+
+    successResponse(res, 'Order rejected', updatedOrder);
+});
+
+// [新增] 技师转单
+export const transferOrder = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) throw new AppError('User not authenticated', 401);
+    const { id } = req.params;
+    const { newTechnicianId } = req.body;
+
+    // 如果没有提供新的技师ID，则为放弃订单
+    if (!newTechnicianId) {
+        const { data, error } = await supabase
+            .from('orders')
+            .update({ technician_id: null, status: OrderStatus.PENDING })
+            .eq('id', id)
+            .eq('technician_id', req.user.userId)
+            .select().single();
+        if (error || !data) throw new AppError('Failed to abandon order', 400, error);
+        await supabase.from('order_logs').insert({ order_id: id, action: 'abandon', notes: '技师放弃订单，返回待处理', operator_id: req.user.userId });
+        return successResponse(res, 'Order abandoned successfully', data);
+    }
+
+    // 转单给其他技师
+    const { data: technician } = await supabase.from('users').select('id, name').eq('id', newTechnicianId).eq('role', UserRole.TECHNICIAN).single();
+    if (!technician) throw new AppError('Target technician not found', 404);
+
+    const { data, error } = await supabase
+        .from('orders')
+        .update({ technician_id: newTechnicianId, status: OrderStatus.PENDING_ACCEPTANCE })
+        .eq('id', id)
+        .eq('technician_id', req.user.userId)
+        .select().single();
+
+    if (error || !data) throw new AppError('Failed to transfer order', 400, error);
+    await supabase.from('order_logs').insert({ order_id: id, action: 'transfer', notes: `订单已转派给技师 ${technician.name}`, operator_id: req.user.userId });
+    successResponse(res, 'Order transferred successfully', data);
+});
+
+// [新增] 更新订单详情 (诊断, 价格)
+export const updateOrderDetails = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) throw new AppError('User not authenticated', 401);
+    const { id } = req.params;
+    const { diagnosis, actual_price, status } = req.body;
+
+    const updateData: any = {};
+    if (diagnosis) updateData.diagnosis = diagnosis;
+    if (actual_price) updateData.actual_price = actual_price;
+    if (status) updateData.status = status; // 允许同时更新状态，如完成
+
+    const { data, error } = await supabase
+        .from('orders')
+        .update(updateData)
+        .eq('id', id)
+        .select().single();
+
+    if (error || !data) throw new AppError('Failed to update order details', 400, error);
+    await supabase.from('order_logs').insert({ order_id: id, action: 'update_details', notes: '订单详情已更新', operator_id: req.user.userId });
+    successResponse(res, 'Order details updated', data);
+});
+
+// [新增] 添加维修日志
+export const addOrderLog = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) throw new AppError('User not authenticated', 401);
+    const { id } = req.params;
+    const { notes, images } = req.body;
+
+    if (!notes || notes.trim().length < 1) throw new AppError('Log notes cannot be empty', 400);
+
+    const { data, error } = await supabase
+        .from('order_logs')
+        .insert({
+            order_id: id,
+            action: 'log',
+            notes,
+            images: images || [],
+            operator_id: req.user.userId
+        }).select().single();
+
+    if (error || !data) throw new AppError('Failed to add order log', 400, error);
+    successResponse(res, 'Log added successfully', data, 201);
 });

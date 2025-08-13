@@ -18,6 +18,7 @@ import ServiceManagement from '../pages/admin/ServiceManagement';
 import TechnicianDashboard from '../pages/TechnicianDashboard';
 import TechnicianOrders from '../pages/technician/TechnicianOrders';
 import TechnicianProfile from '../pages/technician/TechnicianProfile';
+import TechnicianClaimOrder from '../pages/technician/TechnicianClaimOrder';
 
 // 路由配置
 export const router = createBrowserRouter([
@@ -48,6 +49,7 @@ export const router = createBrowserRouter([
     ),
     children: [
       { path: 'dashboard', element: <TechnicianDashboard /> },
+      { path: 'claim', element: <TechnicianClaimOrder /> },
       { path: 'orders', element: <TechnicianOrders /> },
       { path: 'profile', element: <TechnicianProfile /> },
     ]

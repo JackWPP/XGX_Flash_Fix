@@ -26,7 +26,7 @@ import { getServiceMappingByDatabaseId, getServiceMappingByName } from '../utils
 import api from '../utils/axios';
 
 // 本地类型定义
-type OrderStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled' | 'paid';
+type OrderStatus = 'pending' | 'pending_acceptance' | 'accepted' | 'in_progress' | 'completed' | 'cancelled' | 'paid';
 
 type UserRole = 'user' | 'technician' | 'admin' | 'service' | 'finance';
 
@@ -110,6 +110,7 @@ const { TextArea } = Input;
 // 订单状态配置
 const statusConfig = {
   pending: { color: 'orange', text: '待接单' },
+  pending_acceptance: { color: 'gold', text: '待接收' },
   accepted: { color: 'blue', text: '已接单' },
   in_progress: { color: 'processing', text: '维修中' },
   completed: { color: 'success', text: '已完成' },
@@ -121,6 +122,7 @@ const statusConfig = {
 const urgencyConfig = {
   low: { color: 'default', text: '不紧急' },
   normal: { color: 'blue', text: '一般' },
+  medium: { color: 'blue', text: '一般' },
   high: { color: 'orange', text: '紧急' },
   urgent: { color: 'red', text: '特急' }
 };
@@ -308,6 +310,11 @@ const OrderList: React.FC = () => {
       width: 100,
       render: (status: OrderStatus) => {
         const config = statusConfig[status];
+        // 添加容错处理，避免undefined错误
+        if (!config) {
+          console.warn(`未知的订单状态值: ${status}`);
+          return <Tag color="default">{status || '未知状态'}</Tag>;
+        }
         return <Tag color={config.color}>{config.text}</Tag>;
       }
     },
@@ -320,6 +327,7 @@ const OrderList: React.FC = () => {
         const config = urgencyConfig[urgency as keyof typeof urgencyConfig];
         // 添加容错处理，避免undefined错误
         if (!config) {
+          console.warn(`未知的紧急程度值: ${urgency}`);
           return <Tag color="default">{urgency || '未知'}</Tag>;
         }
         return <Tag color={config.color}>{config.text}</Tag>;
@@ -332,7 +340,7 @@ const OrderList: React.FC = () => {
       width: 100,
       render: (price: number) => (
         <Text className="font-semibold text-orange-600">
-          ¥{price}
+          ¥{price || '待定'}
         </Text>
       )
     },

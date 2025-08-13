@@ -10,7 +10,7 @@ export enum UserRole {
 // 订单状态枚举
 export enum OrderStatus {
   PENDING = 'pending',
-  ACCEPTED = 'accepted',
+  PENDING_ACCEPTANCE = 'pending_acceptance', // 新增：待技师接收
   IN_PROGRESS = 'in_progress',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',

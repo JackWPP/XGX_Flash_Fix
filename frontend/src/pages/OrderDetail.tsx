@@ -1,172 +1,132 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Descriptions, Card, Spin, Alert, Row, Col, Typography, Tag, Button, Modal } from 'antd';
-import { UserOutlined, ToolOutlined, AppstoreOutlined, InfoCircleOutlined, CalendarOutlined, DollarCircleOutlined, PhoneOutlined, MailOutlined } from '@ant-design/icons';
-import api from '../utils/axios';
+import { Descriptions, Card, Spin, Alert, Row, Col, Typography, Tag, Divider, message } from 'antd';
+import { useOrderStore } from '../store/orderStore';
 import type { Order } from '../types';
+import { useAuthStore } from '../store/authStore';
+import TechnicianActions from '../components/technician/TechnicianActions';
+import OrderLogList from '../components/technician/OrderLogList';
 
 const { Title, Text } = Typography;
 
+const statusMap = {
+  pending: '待处理',
+  pending_acceptance: '待技师接收',
+  in_progress: '进行中',
+  completed: '已完成',
+  cancelled: '已取消',
+  paid: '已支付',
+};
+
+const statusColor = {
+  pending: 'orange',
+  pending_acceptance: 'gold',
+  in_progress: 'blue',
+  completed: 'green',
+  cancelled: 'red',
+  paid: 'purple',
+};
+
 const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [order, setOrder] = useState<Order | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
+  const { user } = useAuthStore();
+  const { currentOrder, isLoading, error, fetchOrderById, addOrderLog, updateOrderDetails, transferOrder } = useOrderStore();
+  
   useEffect(() => {
-    const fetchOrder = async () => {
-      if (!id) {
-        setError('订单ID不存在');
-        setLoading(false);
-        return;
-      }
+    if (id) {
+      fetchOrderById(id);
+    }
+  }, [id, fetchOrderById]);
 
-      try {
-        setLoading(true);
-        const response = await api.get(`/api/v1/orders/${id}`);
-        if (response.data.success) {
-          setOrder(response.data.data);
-        } else {
-          setError(response.data.message || '获取订单详情失败');
-        }
-      } catch (err: any) {
-        setError(err.response?.data?.message || '网络错误，请稍后重试');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchOrder();
-  }, [id]);
-
-  const getStatusColor = (status: string) => {
-    const statusColors: Record<string, string> = {
-      pending: 'orange',
-      confirmed: 'blue',
-      in_progress: 'cyan',
-      completed: 'green',
-      cancelled: 'red'
-    };
-    return statusColors[status] || 'default';
+  const handleAddLog = async (values: { notes: string; images?: any[] }) => {
+    if (!id) return;
+    // 注意：实际项目中，图片需要先上传到服务器获取URL，这里仅为示例
+    const imageUrls = values.images?.map(file => file.name) || [];
+    try {
+      await addOrderLog(id, { notes: values.notes, images: imageUrls });
+      message.success('日志添加成功');
+    } catch (e: any) {
+      message.error(e.message || '日志添加失败');
+    }
   };
 
-  const getStatusText = (status: string) => {
-    const statusTexts: Record<string, string> = {
-      pending: '待确认',
-      confirmed: '已确认',
-      in_progress: '进行中',
-      completed: '已完成',
-      cancelled: '已取消'
-    };
-    return statusTexts[status] || status;
+  const handleUpdateDetails = async (values: { diagnosis: string; actual_price: number }) => {
+    if (!id) return;
+    try {
+      await updateOrderDetails(id, values);
+      message.success('订单详情更新成功');
+    } catch (e: any) {
+      message.error(e.message || '更新失败');
+    }
   };
 
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-        <Spin size="large" />
-      </div>
-    );
-  }
+  const handleTransfer = async (newTechnicianId?: string) => {
+    if (!id) return;
+    try {
+      await transferOrder(id, newTechnicianId);
+      message.success(newTechnicianId ? '转单成功' : '订单已放弃');
+    } catch (e: any) {
+      message.error(e.message || '操作失败');
+    }
+  };
 
-  if (error) {
-    return (
-      <Alert
-        message="加载失败"
-        description={error}
-        type="error"
-        showIcon
-        style={{ margin: '20px' }}
-      />
-    );
-  }
+  if (isLoading && !currentOrder) return <div className="p-8 text-center"><Spin size="large" /></div>;
+  if (error) return <Alert message="加载失败" description={error} type="error" showIcon className="m-8" />;
+  if (!currentOrder) return <Alert message="未找到订单" type="warning" showIcon className="m-8" />;
 
-  if (!order) {
-    return (
-      <Alert
-        message="订单不存在"
-        description="未找到对应的订单信息"
-        type="warning"
-        showIcon
-        style={{ margin: '20px' }}
-      />
-    );
-  }
+  const isTechnicianOwner = user?.role === 'technician' && user.userId === currentOrder.technician_id;
 
   return (
-    <div style={{ padding: '24px' }}>
-      <Title level={2}>订单详情</Title>
+    <div className="p-6 bg-gray-50">
+      <Title level={2}>订单详情 - {currentOrder.order_number}</Title>
       
+      {/* 技师操作面板 */}
+      {isTechnicianOwner && currentOrder.status === 'in_progress' && (
+        <Card className="mb-6">
+          <TechnicianActions
+            order={currentOrder}
+            onUpdateDetails={handleUpdateDetails}
+            onTransfer={handleTransfer}
+          />
+        </Card>
+      )}
+
       <Row gutter={[16, 16]}>
-        <Col span={24}>
-          <Card title={<><InfoCircleOutlined /> 基本信息</>}>
-            <Descriptions column={2} bordered>
-              <Descriptions.Item label="订单号">{order.order_number}</Descriptions.Item>
+        <Col xs={24} md={16}>
+          <Card title="基本信息" className="mb-6">
+            <Descriptions bordered column={1}>
               <Descriptions.Item label="状态">
-                <Tag color={getStatusColor(order.status)}>{getStatusText(order.status)}</Tag>
+                <Tag color={statusColor[currentOrder.status as keyof typeof statusColor]}>
+                  {statusMap[currentOrder.status as keyof typeof statusMap]}
+                </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="预约时间">
-                <CalendarOutlined /> {new Date(order.scheduled_time).toLocaleString()}
-              </Descriptions.Item>
-              <Descriptions.Item label="服务地址">{order.address}</Descriptions.Item>
-              <Descriptions.Item label="最终价格">
-                <DollarCircleOutlined /> ¥{order.final_price}
-              </Descriptions.Item>
-              <Descriptions.Item label="创建时间">
-                {new Date(order.created_at).toLocaleString()}
-              </Descriptions.Item>
-              {order.notes && (
-                <Descriptions.Item label="备注" span={2}>{order.notes}</Descriptions.Item>
-              )}
-            </Descriptions>
-          </Card>
-        </Col>
-
-        <Col span={12}>
-          <Card title={<><UserOutlined /> 客户信息</>}>
-            <Descriptions column={1}>
-              <Descriptions.Item label="姓名">{order.users.name}</Descriptions.Item>
-              <Descriptions.Item label="电话">
-                <PhoneOutlined /> {order.users.phone}
-              </Descriptions.Item>
-              <Descriptions.Item label="邮箱">
-                <MailOutlined /> {order.users.email}
+              <Descriptions.Item label="服务类型">{currentOrder.services.name}</Descriptions.Item>
+              <Descriptions.Item label="设备型号">{currentOrder.device_type} - {currentOrder.device_model}</Descriptions.Item>
+              <Descriptions.Item label="问题描述">{currentOrder.issue_description}</Descriptions.Item>
+              <Descriptions.Item label="诊断内容">{currentOrder.diagnosis || '暂无'}</Descriptions.Item>
+              <Descriptions.Item label="预估/最终报价">
+                ¥{currentOrder.estimated_price} / ¥{currentOrder.actual_price || '---'}
               </Descriptions.Item>
             </Descriptions>
           </Card>
-        </Col>
 
-        <Col span={12}>
-          <Card title={<><AppstoreOutlined /> 服务信息</>}>
-            <Descriptions column={1}>
-              <Descriptions.Item label="服务名称">{order.services.name}</Descriptions.Item>
-              <Descriptions.Item label="服务描述">{order.services.description}</Descriptions.Item>
-              <Descriptions.Item label="服务类别">{order.services.category}</Descriptions.Item>
-              <Descriptions.Item label="基础价格">¥{order.services.base_price}</Descriptions.Item>
-              <Descriptions.Item label="预计时长">{order.services.duration}分钟</Descriptions.Item>
-            </Descriptions>
+          <Card title="维修日志">
+            <OrderLogList logs={currentOrder.order_logs || []} onAddLog={isTechnicianOwner ? handleAddLog : undefined} />
           </Card>
         </Col>
 
-        {order.technicians && (
-          <Col span={24}>
-            <Card title={<><ToolOutlined /> 技师信息</>}>
-              <Descriptions column={2}>
-                <Descriptions.Item label="技师姓名">{order.technicians.name}</Descriptions.Item>
-                <Descriptions.Item label="联系电话">
-                  <PhoneOutlined /> {order.technicians.phone}
-                </Descriptions.Item>
-                {order.technicians.specialties && (
-                  <Descriptions.Item label="专业技能" span={2}>
-                    {order.technicians.specialties.map((specialty, index) => (
-                      <Tag key={index} color="blue">{specialty}</Tag>
-                    ))}
-                  </Descriptions.Item>
-                )}
-              </Descriptions>
+        <Col xs={24} md={8}>
+          <Card title="客户信息" className="mb-6">
+            <Text strong>{currentOrder.users.name}</Text>
+            <p>{currentOrder.contact_phone}</p>
+            <p>{currentOrder.contact_address}</p>
+          </Card>
+          {currentOrder.technicians && (
+            <Card title="负责技师">
+              <Text strong>{currentOrder.technicians.name}</Text>
             </Card>
-          </Col>
-        )}
+          )}
+        </Col>
       </Row>
     </div>
   );

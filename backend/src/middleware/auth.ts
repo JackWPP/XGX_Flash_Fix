@@ -100,3 +100,6 @@ export const requireAdmin = authorize(UserRole.ADMIN);
 
 // 检查是否为财务人员或管理员
 export const requireFinanceOrAdmin = authorize(UserRole.FINANCE, UserRole.ADMIN);
+
+// 检查是否为技术员
+export const requireTechnician = authorize(UserRole.TECHNICIAN);

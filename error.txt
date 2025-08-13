@@ -1,0 +1,1 @@
+Uncaught SyntaxError: The requested module '/src/store/orderStore.ts' does not provide an export named 'Order' (at OrderDetail.tsx:4:25)

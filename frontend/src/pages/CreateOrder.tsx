@@ -46,6 +46,7 @@ const serviceOptions = getServiceOptions();
 // 紧急程度选项
 const urgencyOptions = [
   { value: 'low', label: '不紧急（3-5天）', multiplier: 1 },
+  { value: 'normal', label: '正常（2-3天）', multiplier: 1.1 },
   { value: 'medium', label: '一般（1-2天）', multiplier: 1.2 },
   { value: 'high', label: '紧急（当天）', multiplier: 1.5 },
   { value: 'urgent', label: '特急（2小时内）', multiplier: 2 }

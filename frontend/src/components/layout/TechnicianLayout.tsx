@@ -8,7 +8,8 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ToolOutlined,
-  BellOutlined
+  BellOutlined,
+  AppstoreAddOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
@@ -32,6 +33,11 @@ const TechnicianLayout: React.FC = () => {
       key: '/technician/dashboard',
       icon: <DashboardOutlined />,
       label: '工作台',
+    },
+    {
+      key: '/technician/claim',
+      icon: <AppstoreAddOutlined />,
+      label: '接单大厅',
     },
     {
       key: '/technician/orders',
