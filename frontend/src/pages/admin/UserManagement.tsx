@@ -9,7 +9,6 @@ import {
   Form,
   message,
   Tag,
-  Space,
   Row,
   Col,
 } from 'antd';
@@ -40,10 +39,13 @@ const roleColor: Record<UserRole, string> = {
 };
 
 const UserManagement: React.FC = () => {
-  const { users, total, isLoading, fetchUsers, updateUser } = useUserStore();
+  const { users, total, isLoading, fetchUsers, updateUser, createUser, resetUserPassword } = useUserStore();
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [form] = Form.useForm();
+  const [createForm] = Form.useForm();
+  const [pwdForm] = Form.useForm();
 
   const [filters, setFilters] = useState({
     page: 1,
@@ -60,7 +62,9 @@ const UserManagement: React.FC = () => {
     setEditingUser(user);
     form.setFieldsValue({
       name: user.name,
-      role: user.role,
+  role: user.role,
+  email: user.email,
+  avatar: (user as any).avatar,
     });
     setIsModalVisible(true);
   };
@@ -69,6 +73,11 @@ const UserManagement: React.FC = () => {
     setIsModalVisible(false);
     setEditingUser(null);
     form.resetFields();
+  };
+
+  const handleCreateCancel = () => {
+    setIsCreateModalVisible(false);
+    createForm.resetFields();
   };
 
   const handleOk = async () => {
@@ -82,6 +91,33 @@ const UserManagement: React.FC = () => {
       }
     } catch (error) {
       message.error('更新失败');
+    }
+  };
+
+  const handleResetPassword = async () => {
+    try {
+      const { newPassword } = await pwdForm.validateFields();
+      if (editingUser) {
+        await resetUserPassword(editingUser.id, newPassword);
+        message.success('密码已重置');
+        pwdForm.resetFields();
+      }
+    } catch {
+      // 校验错误或接口错误已在全局提示
+    }
+  };
+
+  const handleCreateOk = async () => {
+    try {
+      const values = await createForm.validateFields();
+      await createUser(values);
+      message.success('用户创建成功');
+      handleCreateCancel();
+      // 刷新列表并跳到第一页，便于看到新用户
+      setFilters((prev) => ({ ...prev, page: 1 }));
+      fetchUsers({ ...filters, page: 1 });
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || '创建失败');
     }
   };
 
@@ -150,6 +186,11 @@ const UserManagement: React.FC = () => {
             ))}
           </Select>
         </Col>
+        <Col xs={24} sm={12} md={6} className="text-right">
+          <Button type="primary" onClick={() => setIsCreateModalVisible(true)}>
+            新建用户
+          </Button>
+        </Col>
       </Row>
       <Table
         columns={columns}
@@ -176,12 +217,68 @@ const UserManagement: React.FC = () => {
           <Form.Item name="name" label="姓名" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
+          <Form.Item label="手机号">
+            <Input value={editingUser?.phone} disabled />
+          </Form.Item>
+          <Form.Item name="email" label="邮箱" rules={[{ type: 'email', message: '邮箱格式不正确' }] }>
+            <Input placeholder="可选" />
+          </Form.Item>
           <Form.Item name="role" label="角色" rules={[{ required: true }]}>
             <Select>
               {Object.entries(roleMap).map(([key, value]) => (
                 <Option key={key} value={key}>{value}</Option>
               ))}
             </Select>
+          </Form.Item>
+          <Form.Item name="avatar" label="头像URL">
+            <Input placeholder="可选：头像图片链接" />
+          </Form.Item>
+          <div className="mt-4 p-3 bg-gray-50 border rounded">
+            <Title level={5}>重置密码</Title>
+            <Form form={pwdForm} layout="vertical">
+              <Form.Item name="newPassword" label="新密码" rules={[{ required: true, message: '请输入新密码' }, { min: 6, message: '至少6位' }]}>
+                <Input.Password placeholder="至少6位" />
+              </Form.Item>
+              <Button onClick={handleResetPassword} loading={isLoading}>确认重置</Button>
+            </Form>
+          </div>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="新建用户"
+        visible={isCreateModalVisible}
+        onOk={handleCreateOk}
+        onCancel={handleCreateCancel}
+        confirmLoading={isLoading}
+      >
+        <Form form={createForm} layout="vertical" initialValues={{ role: 'user' }}>
+          <Form.Item name="name" label="姓名" rules={[{ required: true, message: '请输入姓名' }]}>
+            <Input placeholder="请输入姓名" />
+          </Form.Item>
+          <Form.Item name="phone" label="手机号" rules={[
+            { required: true, message: '请输入手机号' },
+            { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号' }
+          ]}>
+            <Input placeholder="11位手机号" maxLength={11} />
+          </Form.Item>
+          <Form.Item name="email" label="邮箱" rules={[
+            { type: 'email', message: '邮箱格式不正确' }
+          ]}>
+            <Input placeholder="可选" />
+          </Form.Item>
+          <Form.Item name="password" label="初始密码" rules={[{ required: true, message: '请输入初始密码' }, { min: 6, message: '至少6位' }]}>
+            <Input.Password placeholder="至少6位" />
+          </Form.Item>
+          <Form.Item name="role" label="角色" rules={[{ required: true, message: '请选择角色' }]}>
+            <Select>
+              {Object.entries(roleMap).map(([key, value]) => (
+                <Option key={key} value={key}>{value}</Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item name="avatar" label="头像URL">
+            <Input placeholder="可选：头像图片链接" />
           </Form.Item>
         </Form>
       </Modal>

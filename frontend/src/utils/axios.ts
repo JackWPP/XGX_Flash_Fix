@@ -46,7 +46,9 @@ api.interceptors.response.use(
           // 未授权，清除token并跳转到登录页
           localStorage.removeItem('auth-storage');
           message.error('登录已过期，请重新登录');
-          window.location.href = '/login';
+          const current = window.location.pathname;
+          const to = current.startsWith('/admin') || current.startsWith('/technician') ? '/admin/login' : '/login';
+          window.location.href = to;
           break;
         case 403:
           message.error('没有权限访问该资源');

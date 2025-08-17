@@ -25,7 +25,7 @@ const TechnicianLayout: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+  navigate('/admin/login');
   };
 
   const menuItems = [

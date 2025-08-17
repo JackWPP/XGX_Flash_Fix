@@ -2,7 +2,8 @@ import { createBrowserRouter } from 'react-router-dom';
 import ProtectedRoute from '../components/ProtectedRoute';
 import PublicRoute from '../components/PublicRoute';
 import Home from '../pages/Home';
-import Login from '../pages/Login';
+import UserLogin from '../pages/UserLogin';
+import AdminLogin from '../pages/AdminLogin';
 import Register from '../pages/Register';
 import CreateOrder from '../pages/CreateOrder';
 import OrderList from '../pages/OrderList';
@@ -29,7 +30,7 @@ export const router = createBrowserRouter([
   {
     path: '/admin',
     element: (
-      <ProtectedRoute allowedRoles={['admin']}>
+  <ProtectedRoute allowedRoles={['admin', 'service', 'finance']}>
         <AdminLayout />
       </ProtectedRoute>
     ),
@@ -58,7 +59,15 @@ export const router = createBrowserRouter([
     path: '/login',
     element: (
       <PublicRoute>
-        <Login />
+        <UserLogin />
+      </PublicRoute>
+    )
+  },
+  {
+    path: '/admin/login',
+    element: (
+      <PublicRoute>
+        <AdminLogin />
       </PublicRoute>
     )
   },

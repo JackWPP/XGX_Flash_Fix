@@ -31,6 +31,8 @@ interface UserState {
   error: string | null;
   fetchUsers: (params?: { page?: number; limit?: number; role?: string; search?: string }) => Promise<void>;
   updateUser: (userId: string, userData: Partial<User>) => Promise<User>;
+  createUser: (payload: { name: string; phone: string; password: string; email?: string; role: UserRole; avatar?: string }) => Promise<User>;
+  resetUserPassword: (userId: string, newPassword: string) => Promise<void>;
 }
 
 export const useUserStore = create<UserState>((set) => ({
@@ -84,6 +86,39 @@ export const useUserStore = create<UserState>((set) => ({
       }
     } catch (error: any) {
       set({ isLoading: false, error: error.message || 'An unknown error occurred' });
+      throw error;
+    }
+  },
+
+  createUser: async (payload) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await api.post<{ success: boolean; data: User }>(`/api/v1/users`, payload);
+      if (response.data.success) {
+        const created = response.data.data;
+        // 追加到本地列表（可选），并由调用方决定是否刷新
+        set((state) => ({ users: [created, ...state.users], isLoading: false }));
+        return created;
+      } else {
+        throw new Error('Failed to create user');
+      }
+    } catch (error: any) {
+      set({ isLoading: false, error: error?.response?.data?.message || error.message || 'An unknown error occurred' });
+      throw error;
+    }
+  },
+
+  resetUserPassword: async (userId, newPassword) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await api.put<{ success: boolean; message: string }>(`/api/v1/users/${userId}/reset-password`, { newPassword });
+      if (response.data.success) {
+        set({ isLoading: false });
+      } else {
+        throw new Error('Failed to reset password');
+      }
+    } catch (error: any) {
+      set({ isLoading: false, error: error?.response?.data?.message || error.message || 'An unknown error occurred' });
       throw error;
     }
   },

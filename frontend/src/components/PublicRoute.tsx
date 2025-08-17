@@ -7,9 +7,16 @@ interface PublicRouteProps {
 }
 
 const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
 
-  if (token) {
+  if (token && user) {
+    // 已登录用户根据角色跳转到默认首页
+    if (user.role === 'admin' || user.role === 'service' || user.role === 'finance') {
+      return <Navigate to="/admin/dashboard" replace />;
+    }
+    if (user.role === 'technician') {
+      return <Navigate to="/technician/dashboard" replace />;
+    }
     return <Navigate to="/" replace />;
   }
 

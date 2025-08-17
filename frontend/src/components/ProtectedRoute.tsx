@@ -14,8 +14,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   const location = useLocation();
 
   if (!isAuthenticated) {
-    // 如果用户未认证，重定向到登录页
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  // 如果用户未认证，根据当前路径重定向到相应登录页
+  const path = location.pathname;
+  const to = path.startsWith('/admin') || path.startsWith('/technician') ? '/admin/login' : '/login';
+  return <Navigate to={to} state={{ from: location }} replace />;
   }
 
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {

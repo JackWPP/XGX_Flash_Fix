@@ -10,9 +10,9 @@ import { LoginRequest, LoginResponse, User, UserRole } from '../types/index.js';
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const { phone, password, role }: LoginRequest = req.body;
 
-  // 验证必填字段
-  if (!phone || !password || !role) {
-    throw new AppError('Phone, password, and role are required', 400);
+  // 验证必填字段（管理员登录可不传 role）
+  if (!phone || !password) {
+    throw new AppError('Phone and password are required', 400);
   }
 
   // 验证手机号格式
@@ -21,18 +21,34 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Invalid phone number format', 400);
   }
 
-  // 验证角色
-  if (!Object.values(UserRole).includes(role)) {
+  // 如果提供了角色则校验
+  if (role && !Object.values(UserRole).includes(role)) {
     throw new AppError('Invalid role', 400);
   }
 
-  // 查询用户
-  const { data: user, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('phone', phone)
-    .eq('role', role)
-    .single();
+  // 查询用户：若指定 role 则按 role + phone；否则仅按 phone 查找
+  let user: any | null = null;
+  let error: any | null = null;
+  if (role) {
+    ({ data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('phone', phone)
+      .eq('role', role)
+      .single());
+  } else {
+    const { data, error: listError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('phone', phone);
+    error = listError;
+    if (!listError && Array.isArray(data)) {
+      if (data.length === 1) user = data[0];
+      else if (data.length > 1) {
+        throw new AppError('Multiple roles found for this phone, please specify role', 409);
+      }
+    }
+  }
 
   if (error || !user) {
     throw new AppError('Invalid credentials', 401);

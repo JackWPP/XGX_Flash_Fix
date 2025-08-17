@@ -122,7 +122,8 @@ export interface PaginatedResponse<T> {
 export interface LoginRequest {
   phone: string;
   password: string;
-  role: UserRole;
+  // 角色在“管理员登录”场景下可省略，由服务端根据手机号查找并返回实际角色
+  role?: UserRole;
 }
 
 // 登录响应接口
