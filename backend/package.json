@@ -19,7 +19,6 @@
   "license": "ISC",
   "description": "新干线闪修平台后端服务",
   "dependencies": {
-    "@supabase/supabase-js": "^2.54.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
@@ -27,7 +26,8 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "mysql2": "^3.11.4"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

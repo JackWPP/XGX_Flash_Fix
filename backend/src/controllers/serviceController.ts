@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import { supabase } from '../utils/database.js';
+import { query, queryOne } from '../utils/database.js';
 import { successResponse, paginatedResponse } from '../utils/response.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
-import { UserRole } from '../types/index.js';
+import { Service, UserRole } from '../types/index.js';
 
 // 获取服务列表
 export const getServices = asyncHandler(async (req: Request, res: Response) => {

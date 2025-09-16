@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { supabase } from '../utils/database.js';
+import { query, queryOne } from '../utils/database.js';
 import { generateToken } from '../utils/jwt.js';
 import { successResponse, errorResponse, unauthorizedResponse } from '../utils/response.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
@@ -8,6 +8,7 @@ import { LoginRequest, LoginResponse, User, UserRole } from '../types/index.js';
 
 // 用户登录
 export const login = asyncHandler(async (req: Request, res: Response) => {
+  console.log('Login attempt received:', req.body);
   const { phone, password, role }: LoginRequest = req.body;
 
   // 验证必填字段（管理员登录可不传 role）
@@ -28,35 +29,31 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 
   // 查询用户：若指定 role 则按 role + phone；否则仅按 phone 查找
   let user: any | null = null;
-  let error: any | null = null;
+
   if (role) {
-    ({ data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('phone', phone)
-      .eq('role', role)
-      .single());
+    user = await queryOne('SELECT * FROM users WHERE phone = ? AND role = ?', [phone, role]);
   } else {
-    const { data, error: listError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('phone', phone);
-    error = listError;
-    if (!listError && Array.isArray(data)) {
-      if (data.length === 1) user = data[0];
-      else if (data.length > 1) {
-        throw new AppError('Multiple roles found for this phone, please specify role', 409);
-      }
+    const users = await query('SELECT * FROM users WHERE phone = ?', [phone]);
+    if (users.length === 1) {
+      user = users[0];
+    } else if (users.length > 1) {
+      throw new AppError('Multiple roles found for this phone, please specify role', 409);
     }
   }
+  console.log('User found in DB:', user ? { id: user.id, name: user.name, role: user.role } : null);
 
-  if (error || !user) {
+  if (!user) {
+    console.error('Login Error: User not found for phone:', phone, 'and role:', role);
     throw new AppError('Invalid credentials', 401);
   }
 
   // 验证密码
+  console.log(`Comparing password for user ${user.id}...`);
   const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+  console.log(`Password validation result for user ${user.id}:`, isPasswordValid);
+
   if (!isPasswordValid) {
+    console.error(`Login Error: Invalid password for user ${user.id}`);
     throw new AppError('Invalid credentials', 401);
   }
 
@@ -113,11 +110,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // 检查用户是否已存在
-  const { data: existingUser } = await supabase
-    .from('users')
-    .select('id')
-    .eq('phone', phone)
-    .single();
+  const existingUser = await queryOne('SELECT id FROM users WHERE phone = ?', [phone]);
 
   if (existingUser) {
     throw new AppError('User with this phone number already exists', 409);
@@ -128,20 +121,15 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   const passwordHash = await bcrypt.hash(password, saltRounds);
 
   // 创建用户
-  const { data: newUser, error } = await supabase
-    .from('users')
-    .insert({
-      name,
-      phone,
-      email,
-      role,
-      password_hash: passwordHash
-    })
-    .select()
-    .single();
+  const userId = globalThis.crypto.randomUUID();
+  await query(
+    'INSERT INTO users (id, name, phone, email, role, password_hash) VALUES (?, ?, ?, ?, ?, ?)',
+    [userId, name, phone, email, role, passwordHash]
+  );
 
-  if (error) {
-    console.error('User creation error:', error);
+  const newUser = await queryOne('SELECT * FROM users WHERE id = ?', [userId]);
+
+  if (!newUser) {
     throw new AppError('Failed to create user', 500);
   }
 
@@ -176,13 +164,9 @@ export const getCurrentUser = asyncHandler(async (req: Request, res: Response) =
   }
 
   // 查询用户详细信息
-  const { data: user, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', req.user.userId)
-    .single();
+  const user = await queryOne('SELECT * FROM users WHERE id = ?', [req.user.userId]);
 
-  if (error || !user) {
+  if (!user) {
     throw new AppError('User not found', 404);
   }
 
@@ -208,37 +192,41 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
   }
 
   const { name, email, avatar } = req.body;
-  const updateData: any = {};
+  const updateFields: string[] = [];
+  const updateValues: any[] = [];
 
-  if (name) updateData.name = name;
+  if (name) {
+    updateFields.push('name = ?');
+    updateValues.push(name);
+  }
   if (email) {
     // 验证邮箱格式
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       throw new AppError('Invalid email format', 400);
     }
-    updateData.email = email;
+    updateFields.push('email = ?');
+    updateValues.push(email);
   }
-  if (avatar) updateData.avatar = avatar;
+  if (avatar) {
+    updateFields.push('avatar = ?');
+    updateValues.push(avatar);
+  }
 
-  if (Object.keys(updateData).length === 0) {
+  if (updateFields.length === 0) {
     throw new AppError('No valid fields to update', 400);
   }
 
-  updateData.updated_at = new Date().toISOString();
+  updateFields.push('updated_at = NOW()');
+  updateValues.push(req.user.userId);
 
   // 更新用户信息
-  const { data: updatedUser, error } = await supabase
-    .from('users')
-    .update(updateData)
-    .eq('id', req.user.userId)
-    .select()
-    .single();
+  await query(
+    `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
+    updateValues
+  );
 
-  if (error) {
-    console.error('User update error:', error);
-    throw new AppError('Failed to update user information', 500);
-  }
+  const updatedUser = await queryOne('SELECT * FROM users WHERE id = ?', [req.user.userId]);
 
   // 构造响应数据（不包含密码）
   const userData: User = {
@@ -272,13 +260,9 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
   }
 
   // 查询用户当前密码
-  const { data: user, error } = await supabase
-    .from('users')
-    .select('password_hash')
-    .eq('id', req.user.userId)
-    .single();
+  const user = await queryOne('SELECT password_hash FROM users WHERE id = ?', [req.user.userId]);
 
-  if (error || !user) {
+  if (!user) {
     throw new AppError('User not found', 404);
   }
 
@@ -293,18 +277,10 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
   const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
 
   // 更新密码
-  const { error: updateError } = await supabase
-    .from('users')
-    .update({
-      password_hash: newPasswordHash,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', req.user.userId);
-
-  if (updateError) {
-    console.error('Password update error:', updateError);
-    throw new AppError('Failed to update password', 500);
-  }
+  await query(
+    'UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?',
+    [newPasswordHash, req.user.userId]
+  );
 
   successResponse(res, 'Password changed successfully');
 });

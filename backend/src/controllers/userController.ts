@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { supabase } from '../utils/database.js';
+import { query, queryOne } from '../utils/database.js';
 import { successResponse, paginatedResponse } from '../utils/response.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
 import { User, UserRole } from '../types/index.js';
