@@ -1,4 +1,4 @@
-# 数据库迁移指南
+﻿# 数据库迁移指南
 
 ## 概述
 
@@ -8,10 +8,10 @@
 
 ### 环境变量配置
 
-在 `backend/.env` 文件中配置以下MySQL连接信息：
+在 `backend/.env` 文件中配置以下 MySQL 连接信息：
 
 ```env
-# MySQL数据库配置
+# MySQL 数据库配置
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=SE2025
@@ -23,7 +23,7 @@ DB_NAME=xgx_flash_fix
 
 1. **创建数据库和表结构**
 
-   使用以下SQL脚本初始化数据库：
+   使用以下 SQL 脚本初始化数据库：
    ```bash
    mysql -u SE2025 -p < mysql/migrations/003_create_migration_script.sql
    ```
@@ -33,6 +33,14 @@ DB_NAME=xgx_flash_fix
    按顺序执行以下文件：
    - `mysql/migrations/001_create_initial_tables.sql`
    - `mysql/migrations/002_update_order_workflow.sql`
+   - `mysql/migrations/005_sync_service_ids.sql`（确保与前端服务映射一致）
+
+3. **（重要）同步服务 ID 映射**
+
+   如果你是从旧库升级，或遇到前端下单时提示 `Service not found or inactive`，请执行：
+   ```bash
+   mysql -u SE2025 -p xgx_flash_fix < mysql/migrations/005_sync_service_ids.sql
+   ```
 
 ## 主要变更
 
@@ -57,12 +65,12 @@ DB_NAME=xgx_flash_fix
 |------|----------|-------|
 | 主键生成 | `gen_random_uuid()` | `UUID()` |
 | 时间戳 | `NOW()` | `NOW()` |
-| JSON字段 | JSONB | JSON |
-| 枚举类型 | CHECK约束 | ENUM |
+| JSON 字段 | JSONB | JSON |
+| 枚举类型 | CHECK 约束 | ENUM |
 
 ### 4. 查询语法变更
 
-**之前 (Supabase)**:
+**之前（Supabase）**：
 ```javascript
 const { data, error } = await supabase
   .from('users')
@@ -71,14 +79,14 @@ const { data, error } = await supabase
   .single();
 ```
 
-**现在 (MySQL)**:
+**现在（MySQL）**：
 ```javascript
 const user = await queryOne('SELECT * FROM users WHERE phone = ?', [phone]);
 ```
 
 ## 数据库表结构
 
-### 用户表 (users)
+### 用户表（users）
 ```sql
 CREATE TABLE users (
   id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -93,7 +101,7 @@ CREATE TABLE users (
 );
 ```
 
-### 服务表 (services)
+### 服务表（services）
 ```sql
 CREATE TABLE services (
   id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -108,7 +116,7 @@ CREATE TABLE services (
 );
 ```
 
-### 订单表 (orders)
+### 订单表（orders）
 ```sql
 CREATE TABLE orders (
   id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
@@ -146,7 +154,7 @@ CREATE TABLE orders (
 2. **配置环境变量**
    ```bash
    cp .env.example .env
-   # 编辑 .env 文件，设置MySQL连接信息
+   # 编辑 .env 文件，设置 MySQL 连接信息
    ```
 
 3. **初始化数据库**
@@ -154,35 +162,41 @@ CREATE TABLE orders (
    mysql -u SE2025 -p < mysql/migrations/003_create_migration_script.sql
    ```
 
-4. **启动后端服务**
+4. **同步服务 ID 映射（重要）**
+   ```bash
+   mysql -u SE2025 -p xgx_flash_fix < mysql/migrations/005_sync_service_ids.sql
+   ```
+
+5. **启动后端服务**
    ```bash
    npm run dev
    ```
 
 ## 注意事项
 
-1. **权限管理**: MySQL版本移除了Supabase的RLS（行级安全）策略，权限控制完全在应用层实现
-2. **事务处理**: 使用MySQL的事务机制替代Supabase的自动事务
-3. **连接池**: 使用mysql2的连接池管理数据库连接
-4. **错误处理**: 统一的错误处理机制，包装MySQL错误信息
+1. **权限管理**：MySQL 版本移除了 Supabase 的 RLS（行级安全）策略，权限控制完全在应用层实现。
+2. **事务处理**：使用 MySQL 的事务机制替代 Supabase 的自动事务。
+3. **连接池**：使用 `mysql2` 的连接池管理数据库连接。
+4. **错误处理**：统一的错误处理机制，包装 MySQL 错误信息。
 
 ## 测试
 
-确保所有API端点正常工作：
-- 用户注册/登录
-- 订单创建/查询
+确保所有 API 端点正常工作：
+- 用户注册 / 登录
+- 订单创建 / 查询
 - 服务管理
 - 用户管理
 
 ## 故障排除
 
-1. **连接失败**: 检查MySQL服务是否启动，用户名密码是否正确
-2. **表不存在**: 确保已执行数据库迁移脚本
-3. **权限错误**: 确保MySQL用户有足够的权限操作数据库
+1. **连接失败**：检查 MySQL 服务是否启动，用户名密码是否正确。
+2. **表不存在**：确保已执行数据库迁移脚本。
+3. **权限错误**：确保 MySQL 用户有足够的权限操作数据库。
 
 ## 性能优化建议
 
-1. 为常用查询字段添加索引
-2. 使用连接池管理数据库连接
-3. 实现查询缓存机制
-4. 定期优化数据库表结构
+1. 为常用查询字段添加索引。
+2. 使用连接池管理数据库连接。
+3. 实现查询缓存机制。
+4. 定期优化数据库表结构。
+

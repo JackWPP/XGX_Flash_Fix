@@ -1,264 +1,176 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
 import { query, queryOne } from '../utils/database.js';
 import { successResponse, paginatedResponse } from '../utils/response.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
-import { Service, UserRole } from '../types/index.js';
+import { UserRole } from '../types/index.js';
 
-// 获取服务列表
+// List services --------------------------------------------------------
 export const getServices = asyncHandler(async (req: Request, res: Response) => {
-  const {
-    page = 1,
-    limit = 20,
-    category,
-    isActive,
-    search
-  } = req.query;
+  const { page = 1, limit = 20, category, isActive, search } = req.query as any;
 
-  const offset = (Number(page) - 1) * Number(limit);
+  const pageNum = Math.max(1, Number(page));
+  const limitNum = Math.max(1, Number(limit));
+  const offset = (pageNum - 1) * limitNum;
 
-  let query = supabase
-    .from('services')
-    .select('*', { count: 'exact' });
+  const where: string[] = [];
+  const params: any[] = [];
 
-  // 应用过滤条件
   if (category) {
-    query = query.eq('category', category);
+    where.push('category = ?');
+    params.push(String(category));
   }
-  if (isActive !== undefined) {
-    query = query.eq('is_active', isActive === 'true');
+  if (typeof isActive !== 'undefined') {
+    where.push('is_active = ?');
+    params.push(String(isActive) === 'true');
   }
   if (search) {
-    query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
+    where.push('(name LIKE ? OR description LIKE ?)');
+    params.push(`%${String(search)}%`, `%${String(search)}%`);
   }
 
-  // 排序和分页
-  const { data: services, error, count } = await query
-    .order('created_at', { ascending: false })
-    .range(offset, offset + Number(limit) - 1);
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-  if (error) {
-    console.error('Services query error:', error);
-    throw new AppError('Failed to fetch services', 500);
-  }
+  const countRow = await queryOne(`SELECT COUNT(*) AS total FROM services ${whereClause}`, params);
+  const total = Number(countRow?.total || 0);
 
-  paginatedResponse(res, 'Services retrieved successfully', services || [], {
-    page: Number(page),
-    limit: Number(limit),
-    total: count || 0,
-    totalPages: Math.ceil((count || 0) / Number(limit))
-  });
+  const services = await query(
+    `SELECT * FROM services ${whereClause} ORDER BY created_at DESC LIMIT ${limitNum} OFFSET ${offset}`,
+    params
+  );
+
+  paginatedResponse(
+    res,
+    'Services retrieved successfully',
+    services || [],
+    pageNum,
+    limitNum,
+    total
+  );
 });
 
-// 获取服务详情
+// Get service by id ----------------------------------------------------
 export const getServiceById = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-
-  const { data: service, error } = await supabase
-    .from('services')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (error || !service) {
-    throw new AppError('Service not found', 404);
-  }
-
+  const service = await queryOne('SELECT * FROM services WHERE id = ?', [id]);
+  if (!service) throw new AppError('Service not found', 404);
   successResponse(res, 'Service retrieved successfully', service);
 });
 
-// 创建服务（仅管理员）
+// Create service (admin only) -----------------------------------------
 export const createService = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  if (!req.user) throw new AppError('User not authenticated', 401);
+  if (req.user.role !== UserRole.ADMIN) throw new AppError('Access denied', 403);
 
-  if (req.user.role !== UserRole.ADMIN) {
-    throw new AppError('Access denied', 403);
-  }
+  const { name, description, category, base_price, estimated_duration, is_active = true } = req.body;
 
-  const {
-    name,
-    description,
-    category,
-    base_price,
-    estimated_duration,
-    is_active = true
-  } = req.body;
-
-  // 验证必填字段
   if (!name || !description || !category || base_price === undefined || base_price === null) {
     throw new AppError('Name, description, category, and base price are required', 400);
   }
+  if (Number(base_price) < 0) throw new AppError('Base price must be non-negative', 400);
 
-  if (base_price < 0) {
-    throw new AppError('Base price must be non-negative', 400);
-  }
+  await query(
+    `INSERT INTO services (name, description, category, base_price, estimated_duration, is_active)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [name, description, category, base_price, estimated_duration || null, !!is_active]
+  );
 
-  // 创建服务
-  const { data: newService, error } = await supabase
-    .from('services')
-    .insert({
-      name,
-      description,
-      category,
-      base_price,
-      estimated_duration,
-      is_active
-    })
-    .select()
-    .single();
+  const created = await queryOne(
+    `SELECT * FROM services WHERE name = ? AND category = ? ORDER BY created_at DESC LIMIT 1`,
+    [name, category]
+  );
 
-  if (error) {
-    console.error('Service creation error:', error);
-    throw new AppError('Failed to create service', 500);
-  }
-
-  successResponse(res, 'Service created successfully', newService, 201);
+  successResponse(res, 'Service created successfully', created, 201);
 });
 
-// 更新服务（仅管理员）
+// Update service (admin only) -----------------------------------------
 export const updateService = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
-
-  if (req.user.role !== UserRole.ADMIN) {
-    throw new AppError('Access denied', 403);
-  }
+  if (!req.user) throw new AppError('User not authenticated', 401);
+  if (req.user.role !== UserRole.ADMIN) throw new AppError('Access denied', 403);
 
   const { id } = req.params;
-  const {
-    name,
-    description,
-    category,
-    base_price,
-    estimated_duration,
-    is_active
-  } = req.body;
+  const { name, description, category, base_price, estimated_duration, is_active } = req.body;
 
-  const updateData: any = {
-    updated_at: new Date().toISOString()
-  };
+  const fields: string[] = [];
+  const params: any[] = [];
 
-  if (name) updateData.name = name;
-  if (description) updateData.description = description;
-  if (category) updateData.category = category;
+  if (name !== undefined) {
+    fields.push('name = ?');
+    params.push(name);
+  }
+  if (description !== undefined) {
+    fields.push('description = ?');
+    params.push(description);
+  }
+  if (category !== undefined) {
+    fields.push('category = ?');
+    params.push(category);
+  }
   if (base_price !== undefined) {
-    if (base_price < 0) {
-      throw new AppError('Base price must be non-negative', 400);
-    }
-    updateData.base_price = base_price;
+    if (Number(base_price) < 0) throw new AppError('Base price must be non-negative', 400);
+    fields.push('base_price = ?');
+    params.push(base_price);
   }
-  if (estimated_duration !== undefined) updateData.estimated_duration = estimated_duration;
-  if (is_active !== undefined) updateData.is_active = is_active;
-
-  // 更新服务
-  const { data: updatedService, error } = await supabase
-    .from('services')
-    .update(updateData)
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Service update error:', error);
-    throw new AppError('Failed to update service', 500);
+  if (estimated_duration !== undefined) {
+    fields.push('estimated_duration = ?');
+    params.push(estimated_duration);
   }
+  if (is_active !== undefined) {
+    fields.push('is_active = ?');
+    params.push(!!is_active);
+  }
+  fields.push('updated_at = NOW()');
 
-  if (!updatedService) {
-    throw new AppError('Service not found', 404);
+  if (!fields.length) {
+    const current = await queryOne('SELECT * FROM services WHERE id = ?', [id]);
+    if (!current) throw new AppError('Service not found', 404);
+    successResponse(res, 'Service updated successfully', current);
+    return;
   }
 
-  successResponse(res, 'Service updated successfully', updatedService);
+  params.push(id);
+  await query(`UPDATE services SET ${fields.join(', ')} WHERE id = ?`, params);
+  const updated = await queryOne('SELECT * FROM services WHERE id = ?', [id]);
+  if (!updated) throw new AppError('Service not found', 404);
+  successResponse(res, 'Service updated successfully', updated);
 });
 
-// 删除服务（仅管理员）
+// Delete service (admin only) -----------------------------------------
 export const deleteService = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
-
-  if (req.user.role !== UserRole.ADMIN) {
-    throw new AppError('Access denied', 403);
-  }
+  if (!req.user) throw new AppError('User not authenticated', 401);
+  if (req.user.role !== UserRole.ADMIN) throw new AppError('Access denied', 403);
 
   const { id } = req.params;
 
-  // 检查是否有关联的订单
-  const { data: orders, error: orderError } = await supabase
-    .from('orders')
-    .select('id')
-    .eq('service_id', id)
-    .limit(1);
+  const existOrder = await queryOne('SELECT id FROM orders WHERE service_id = ? LIMIT 1', [id]);
+  if (existOrder) throw new AppError('Cannot delete service with existing orders', 400);
 
-  if (orderError) {
-    console.error('Order check error:', orderError);
-    throw new AppError('Failed to check service dependencies', 500);
-  }
-
-  if (orders && orders.length > 0) {
-    throw new AppError('Cannot delete service with existing orders', 400);
-  }
-
-  // 删除服务
-  const { error } = await supabase
-    .from('services')
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    console.error('Service deletion error:', error);
-    throw new AppError('Failed to delete service', 500);
-  }
-
+  await query('DELETE FROM services WHERE id = ?', [id]);
   successResponse(res, 'Service deleted successfully');
 });
 
-// 获取服务分类列表
+// List service categories ---------------------------------------------
 export const getServiceCategories = asyncHandler(async (req: Request, res: Response) => {
-  const { data: categories, error } = await supabase
-    .from('services')
-    .select('category')
-    .eq('is_active', true);
-
-  if (error) {
-    console.error('Categories query error:', error);
-    throw new AppError('Failed to fetch service categories', 500);
-  }
-
-  // 去重并排序
-  const uniqueCategories = [...new Set(categories?.map(c => c.category) || [])].sort();
-
-  successResponse(res, 'Service categories retrieved successfully', uniqueCategories);
+  const rows = await query('SELECT DISTINCT category FROM services WHERE is_active = 1');
+  const categories = (rows || []).map((r: any) => r.category).sort();
+  successResponse(res, 'Service categories retrieved successfully', categories);
 });
 
-// 获取热门服务
+// Popular services ----------------------------------------------------
 export const getPopularServices = asyncHandler(async (req: Request, res: Response) => {
-  const { limit = 10 } = req.query;
+  const { limit = 10 } = req.query as any;
+  const limitNum = Math.max(1, Number(limit));
 
-  // 查询订单数量最多的服务
-  const { data: popularServices, error } = await supabase
-    .from('services')
-    .select(`
-      *,
-      orders!inner(service_id)
-    `)
-    .eq('is_active', true)
-    .limit(Number(limit));
+  const rows = await query(
+    `SELECT s.*, COALESCE(COUNT(o.id), 0) AS orderCount
+     FROM services s
+     LEFT JOIN orders o ON o.service_id = s.id
+     WHERE s.is_active = 1
+     GROUP BY s.id
+     ORDER BY orderCount DESC, s.created_at DESC
+     LIMIT ${limitNum}`
+  );
 
-  if (error) {
-    console.error('Popular services query error:', error);
-    throw new AppError('Failed to fetch popular services', 500);
-  }
-
-  // 计算每个服务的订单数量并排序
-  const servicesWithCount = popularServices?.map(service => ({
-    ...service,
-    orderCount: service.orders?.length || 0
-  })).sort((a, b) => b.orderCount - a.orderCount) || [];
-
-  // 移除orders字段，只保留orderCount
-  const result = servicesWithCount.map(({ orders, ...service }) => service);
-
-  successResponse(res, 'Popular services retrieved successfully', result);
+  successResponse(res, 'Popular services retrieved successfully', rows || []);
 });
+
+

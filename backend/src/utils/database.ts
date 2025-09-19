@@ -1,12 +1,12 @@
-import mysql from 'mysql2/promise';
+﻿import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// MySQL数据库配置
+// MySQL database configuration
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '3306'),
+  port: parseInt(process.env.DB_PORT || '3306', 10),
   user: process.env.DB_USER || 'SE2025',
   password: process.env.DB_PASSWORD || 'Cs22032025',
   database: process.env.DB_NAME || 'xgx_flash_fix',
@@ -16,10 +16,10 @@ const dbConfig = {
   timezone: '+08:00'
 };
 
-// 创建MySQL连接池
+// Create MySQL connection pool
 export const pool = mysql.createPool(dbConfig);
 
-// 数据库表名常量
+// Table name constants
 export const TABLES = {
   USERS: 'users',
   SERVICES: 'services',
@@ -29,7 +29,7 @@ export const TABLES = {
   ORDER_LOGS: 'order_logs'
 } as const;
 
-// 数据库连接测试
+// Connection test helper
 export const testConnection = async (): Promise<boolean> => {
   try {
     const connection = await pool.getConnection();
@@ -43,10 +43,10 @@ export const testConnection = async (): Promise<boolean> => {
   }
 };
 
-// 执行查询的辅助函数
+// Query helper
 export const query = async (sql: string, params?: any[]): Promise<any> => {
   try {
-    const [rows] = await pool.execute(sql, params);
+    const [rows] = await pool.execute(sql, params || []);
     return rows;
   } catch (error) {
     console.error('Database query error:', error);
@@ -54,13 +54,13 @@ export const query = async (sql: string, params?: any[]): Promise<any> => {
   }
 };
 
-// 获取单条记录
+// Single row helper
 export const queryOne = async (sql: string, params?: any[]): Promise<any> => {
   const rows = await query(sql, params);
   return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
 };
 
-// 执行事务
+// Transaction helper
 export const transaction = async (callback: (connection: mysql.PoolConnection) => Promise<any>): Promise<any> => {
   const connection = await pool.getConnection();
   try {
@@ -76,8 +76,9 @@ export const transaction = async (callback: (connection: mysql.PoolConnection) =
   }
 };
 
-// 关闭数据库连接池
+// Close connection pool
 export const closePool = async (): Promise<void> => {
   await pool.end();
   console.log('MySQL connection pool closed');
 };
+

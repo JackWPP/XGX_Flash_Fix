@@ -1,10 +1,51 @@
-import { Request, Response } from 'express';
-import { query, queryOne, transaction } from '../utils/database.js';
-import { successResponse, errorResponse, paginatedResponse } from '../utils/response.js';
+﻿import { Request, Response } from 'express';
+import { query, queryOne } from '../utils/database.js';
+import { successResponse, paginatedResponse } from '../utils/response.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.js';
-import { Order, OrderStatus, CreateOrderRequest, UpdateOrderStatusRequest, UserRole } from '../types/index.js';
+import { OrderStatus, CreateOrderRequest, UpdateOrderStatusRequest, UserRole } from '../types/index.js';
 
-// 创建订单 (逻辑不变)
+const DEFAULT_CONTACT_ADDRESS = 'Pending confirmation';
+const ORDER_NUMBER_PREFIX = 'XGX';
+
+const buildOrderNumber = () => `${ORDER_NUMBER_PREFIX}${Date.now()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+// Helpers ---------------------------------------------------------------
+const shapeOrderDetails = (row: any, logs: any[] = [], payments: any[] = [], reviews: any[] = []) => {
+  if (!row) return null;
+  return {
+    ...row,
+    users: row.user_id
+      ? {
+          id: row.user_id,
+          name: row.user_name,
+          phone: row.user_phone,
+          email: row.user_email,
+          role: row.user_role
+        }
+      : undefined,
+    services: row.service_id
+      ? {
+          id: row.service_id,
+          name: row.service_name,
+          category: row.service_category,
+          base_price: row.service_base_price
+        }
+      : undefined,
+    technicians: row.technician_id
+      ? {
+          id: row.technician_id,
+          name: row.technician_name,
+          phone: row.technician_phone,
+          role: row.technician_role
+        }
+      : undefined,
+    order_logs: logs,
+    payments,
+    reviews
+  };
+};
+
+// 创建订单 -------------------------------------------------------------
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('User not authenticated', 401);
 
@@ -23,292 +64,460 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Missing required fields', 400);
   }
 
-  const { data: service, error: serviceError } = await supabase
-    .from('services')
-    .select('base_price')
-    .eq('id', serviceId)
-    .eq('is_active', true)
-    .single();
+  const service = await queryOne(
+    'SELECT base_price FROM services WHERE id = ? AND is_active = 1',
+    [serviceId]
+  );
+  if (!service) throw new AppError('Service not found or inactive', 404);
 
-  if (serviceError || !service) throw new AppError('Service not found or inactive', 404);
+  const orderNumber = buildOrderNumber();
 
-  const orderNumber = `XGX${Date.now()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+  await query(
+    `INSERT INTO orders (
+      order_number, user_id, service_id, device_type, device_model,
+      issue_description, urgency_level, preferred_time, contact_phone,
+      contact_address, status, estimated_price
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      orderNumber,
+      req.user.userId,
+      serviceId,
+      deviceType,
+      deviceModel || '',
+      issueDescription,
+      urgencyLevel,
+      preferredTime || null,
+      contactPhone,
+      contactAddress || DEFAULT_CONTACT_ADDRESS,
+      OrderStatus.PENDING,
+      service.base_price
+    ]
+  );
 
-  const { data: newOrder, error } = await supabase
-    .from('orders')
-    .insert({
-      order_number: orderNumber,
-      user_id: req.user.userId,
-      service_id: serviceId,
-      device_type: deviceType,
-      device_model: deviceModel,
-      issue_description: issueDescription,
-      urgency_level: urgencyLevel,
-      preferred_time: preferredTime,
-      contact_phone: contactPhone,
-      contact_address: contactAddress || '待确认',
-      status: OrderStatus.PENDING,
-      estimated_price: service.base_price
-    })
-    .select('*, services:service_id(*), users:user_id(id, name, phone)')
-    .single();
+  const order = await queryOne(
+    `SELECT o.*, s.name AS service_name, u.name AS user_name, u.phone AS user_phone
+     FROM orders o
+     LEFT JOIN services s ON o.service_id = s.id
+     LEFT JOIN users u ON o.user_id = u.id
+     WHERE o.order_number = ?`,
+    [orderNumber]
+  );
+  if (!order) throw new AppError('Failed to retrieve created order', 500);
 
-  if (error) throw new AppError('Failed to create order', 500, error);
+  await query(
+    'INSERT INTO order_logs (order_id, action, notes, operator_id) VALUES (?, ?, ?, ?)',
+    [order.id, 'create', 'Order created', req.user.userId]
+  );
 
-  await supabase.from('order_logs').insert({
-    order_id: newOrder.id,
-    action: 'create',
-    notes: '订单已创建',
-    operator_id: req.user.userId
-  });
-
-  successResponse(res, 'Order created successfully', newOrder, 201);
+  successResponse(res, 'Order created successfully', order, 201);
 });
 
-// 获取订单列表 (增强)
+// 获取订单列表 ---------------------------------------------------------
 export const getOrders = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('User not authenticated', 401);
 
-  const { page = 1, limit = 10, status, search, view } = req.query;
+  const { page = 1, limit = 10, status, search, view } = req.query as any;
   const offset = (Number(page) - 1) * Number(limit);
 
-  let query = supabase
-    .from('orders')
-    .select('*, services:service_id(id, name), users:user_id(id, name), technicians:technician_id(id, name)', { count: 'exact' });
+  const whereConditions: string[] = [];
+  const params: any[] = [];
 
-  // 根据视图参数调整查询逻辑
   if (view === 'unclaimed') {
-    // 接单大厅视图
-    query = query.eq('status', OrderStatus.PENDING);
+    whereConditions.push('o.status = ?');
+    params.push(OrderStatus.PENDING);
   } else if (req.user.role === UserRole.TECHNICIAN) {
     if (status === OrderStatus.PENDING_ACCEPTANCE) {
-      query = query.eq('technician_id', req.user.userId).eq('status', OrderStatus.PENDING_ACCEPTANCE);
+      whereConditions.push('o.technician_id = ? AND o.status = ?');
+      params.push(req.user.userId, OrderStatus.PENDING_ACCEPTANCE);
     } else {
-      query = query.eq('technician_id', req.user.userId);
-      if(status) query = query.eq('status', status as string);
+      whereConditions.push('o.technician_id = ?');
+      params.push(req.user.userId);
+      if (status) {
+        whereConditions.push('o.status = ?');
+        params.push(String(status));
+      }
     }
   } else if (req.user.role === UserRole.USER) {
-    query = query.eq('user_id', req.user.userId);
-    if(status) query = query.eq('status', status as string);
-  } else { // ADMIN or FINANCE
-    if(status) query = query.eq('status', status as string);
+    whereConditions.push('o.user_id = ?');
+    params.push(req.user.userId);
+    if (status) {
+      whereConditions.push('o.status = ?');
+      params.push(String(status));
+    }
+  } else if (status) {
+    whereConditions.push('o.status = ?');
+    params.push(String(status));
   }
 
   if (search) {
-    query = query.or(`order_number.ilike.%${search}%,device_model.ilike.%${search}%`);
+    whereConditions.push('(o.order_number LIKE ? OR o.device_model LIKE ?)');
+    params.push(`%${search}%`, `%${search}%`);
   }
 
-  const { data: orders, error, count } = await query
-    .order('created_at', { ascending: false })
-    .range(offset, offset + Number(limit) - 1);
+  const whereClause = whereConditions.length ? `WHERE ${whereConditions.join(' AND ')}` : '';
+  const countParams = whereConditions.length ? [...params] : [];
+  const listParams = whereConditions.length ? [...params] : [];
 
-  if (error) throw new AppError('Failed to fetch orders', 500, error);
+  const countResult = await queryOne(
+    `SELECT COUNT(*) AS total FROM orders o ${whereClause}`,
+    countParams
+  );
 
-  paginatedResponse(res, 'Orders retrieved successfully', orders || [], {
-    page: Number(page),
-    limit: Number(limit),
-    total: count || 0,
-    totalPages: Math.ceil((count || 0) / Number(limit))
-  });
+  const orders = await query(
+    `SELECT o.*, 
+            s.id AS service_id, s.name AS service_name,
+            u.id AS user_id, u.name AS user_name,
+            t.id AS technician_id, t.name AS technician_name
+     FROM orders o
+     LEFT JOIN services s ON o.service_id = s.id
+     LEFT JOIN users u ON o.user_id = u.id
+     LEFT JOIN users t ON o.technician_id = t.id
+     ${whereClause}
+     ORDER BY o.created_at DESC
+     LIMIT ${Number(limit)} OFFSET ${offset}`,
+    listParams
+  );
+
+  paginatedResponse(
+    res,
+    'Orders retrieved successfully',
+    orders || [],
+    Number(page),
+    Number(limit),
+    Number(countResult?.total || 0)
+  );
 });
 
-// 获取订单详情 (逻辑不变)
+// 获取订单详情 ---------------------------------------------------------
 export const getOrderById = asyncHandler(async (req: Request, res: Response) => {
-    if (!req.user) throw new AppError('User not authenticated', 401);
-    const { id } = req.params;
-    const { data: order, error } = await supabase
-        .from('orders')
-        .select('*, services:service_id(*), users:user_id(*), technicians:technician_id(*), order_logs(*), payments(*), reviews(*)')
-        .eq('id', id)
-        .single();
+  if (!req.user) throw new AppError('User not authenticated', 401);
+  const { id } = req.params;
 
-    if (error || !order) throw new AppError('Order not found', 404);
-    successResponse(res, 'Order retrieved successfully', order);
+  const row = await queryOne(
+    `SELECT o.*, 
+            s.id AS service_id, s.name AS service_name, s.category AS service_category, s.base_price AS service_base_price,
+            u.id AS user_id, u.name AS user_name, u.phone AS user_phone, u.email AS user_email, u.role AS user_role,
+            t.id AS technician_id, t.name AS technician_name, t.phone AS technician_phone, t.role AS technician_role
+     FROM orders o
+     LEFT JOIN services s ON o.service_id = s.id
+     LEFT JOIN users u ON o.user_id = u.id
+     LEFT JOIN users t ON o.technician_id = t.id
+     WHERE o.id = ?`,
+    [id]
+  );
+  if (!row) throw new AppError('Order not found', 404);
+
+  const logs = await query(
+    `SELECT ol.*, u.name AS operator_name
+     FROM order_logs ol
+     LEFT JOIN users u ON ol.operator_id = u.id
+     WHERE ol.order_id = ?
+     ORDER BY ol.created_at DESC`,
+    [id]
+  );
+
+  const payments = await query(
+    'SELECT * FROM payments WHERE order_id = ? ORDER BY created_at DESC',
+    [id]
+  );
+
+  const reviews = await query(
+    'SELECT * FROM reviews WHERE order_id = ? ORDER BY created_at DESC',
+    [id]
+  );
+
+  const order = shapeOrderDetails(row, logs || [], payments || [], reviews || []);
+  successResponse(res, 'Order retrieved successfully', order);
 });
 
-// [重构] 指派技师
+// 指派技师（管理员） -------------------------------------------------
 export const assignTechnician = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('User not authenticated', 401);
   const { id } = req.params;
-  const { technicianId } = req.body;
+  const { technicianId } = req.body as { technicianId?: string };
 
   if (!technicianId) throw new AppError('Technician ID is required', 400);
 
-  const { data: technician } = await supabase.from('users').select('id, name').eq('id', technicianId).eq('role', UserRole.TECHNICIAN).single();
+  const technician = await queryOne(
+    'SELECT id, name FROM users WHERE id = ? AND role = ?',
+    [technicianId, UserRole.TECHNICIAN]
+  );
   if (!technician) throw new AppError('Technician not found', 404);
 
-  const { data: updatedOrder, error } = await supabase
-    .from('orders')
-    .update({ technician_id: technicianId, status: OrderStatus.PENDING_ACCEPTANCE })
-    .eq('id', id)
-    .in('status', [OrderStatus.PENDING, OrderStatus.PENDING_ACCEPTANCE]) // 允许从待处理或已指派（可转单）更新
-    .select('*, technicians:technician_id(id, name)')
-    .single();
+  const result: any = await query(
+    `UPDATE orders
+     SET technician_id = ?, status = ?
+     WHERE id = ? AND status IN (?, ?)`,
+    [technicianId, OrderStatus.PENDING_ACCEPTANCE, id, OrderStatus.PENDING, OrderStatus.PENDING_ACCEPTANCE]
+  );
 
-  if (error || !updatedOrder) throw new AppError('Failed to assign technician', 500, error);
+  if (result.affectedRows === 0) throw new AppError('Failed to assign technician', 500);
 
-  await supabase.from('order_logs').insert({
-    order_id: id,
-    action: 'assign',
-    notes: `订单已指派给技师 ${technician.name}，等待接收`,
-    operator_id: req.user.userId
-  });
+  const updatedOrder = await queryOne(
+    `SELECT o.*, t.id AS technician_id, t.name AS technician_name
+     FROM orders o
+     LEFT JOIN users t ON o.technician_id = t.id
+     WHERE o.id = ?`,
+    [id]
+  );
+
+  await query(
+    'INSERT INTO order_logs (order_id, action, notes, operator_id) VALUES (?, ?, ?, ?)',
+    [id, 'assign', `Order assigned to technician ${technician.name}`, req.user.userId]
+  );
 
   successResponse(res, 'Technician assigned successfully', updatedOrder);
 });
 
-// [新增] 技师主动接单
+// 技师主动接单 --------------------------------------------------------
 export const claimOrder = asyncHandler(async (req: Request, res: Response) => {
-    if (!req.user) throw new AppError('User not authenticated', 401);
-    const { id } = req.params;
+  if (!req.user) throw new AppError('User not authenticated', 401);
+  const { id } = req.params;
 
-    const { data: updatedOrder, error } = await supabase
-        .from('orders')
-        .update({ technician_id: req.user.userId, status: OrderStatus.IN_PROGRESS })
-        .eq('id', id)
-        .eq('status', OrderStatus.PENDING)
-        .select('*, technicians:technician_id(id, name)')
-        .single();
+  const result: any = await query(
+    `UPDATE orders
+     SET technician_id = ?, status = ?
+     WHERE id = ? AND status = ?`,
+    [req.user.userId, OrderStatus.IN_PROGRESS, id, OrderStatus.PENDING]
+  );
 
-    if (error || !updatedOrder) throw new AppError('Failed to claim order. It might be already taken.', 409, error);
+  if (result.affectedRows === 0) {
+    throw new AppError('Failed to claim order. It might already be taken.', 409);
+  }
 
-    await supabase.from('order_logs').insert({
-        order_id: id,
-        action: 'claim',
-        notes: '技师已接单',
-        operator_id: req.user.userId
-    });
+  const updatedOrder = await queryOne(
+    `SELECT o.*, t.id AS technician_id, t.name AS technician_name
+     FROM orders o
+     LEFT JOIN users t ON o.technician_id = t.id
+     WHERE o.id = ?`,
+    [id]
+  );
 
-    successResponse(res, 'Order claimed successfully', updatedOrder);
+  await query(
+    'INSERT INTO order_logs (order_id, action, notes, operator_id) VALUES (?, ?, ?, ?)',
+    [id, 'claim', 'Order claimed by technician', req.user.userId]
+  );
+
+  successResponse(res, 'Order claimed successfully', updatedOrder);
 });
 
-// [新增] 技师接受指派
+// 技师接受指派 --------------------------------------------------------
 export const acceptOrder = asyncHandler(async (req: Request, res: Response) => {
-    if (!req.user) throw new AppError('User not authenticated', 401);
-    const { id } = req.params;
+  if (!req.user) throw new AppError('User not authenticated', 401);
+  const { id } = req.params;
 
-    const { data: updatedOrder, error } = await supabase
-        .from('orders')
-        .update({ status: OrderStatus.IN_PROGRESS })
-        .eq('id', id)
-        .eq('technician_id', req.user.userId)
-        .eq('status', OrderStatus.PENDING_ACCEPTANCE)
-        .select()
-        .single();
+  const result: any = await query(
+    `UPDATE orders
+     SET status = ?
+     WHERE id = ? AND technician_id = ? AND status = ?`,
+    [OrderStatus.IN_PROGRESS, id, req.user.userId, OrderStatus.PENDING_ACCEPTANCE]
+  );
 
-    if (error || !updatedOrder) throw new AppError('Failed to accept order.', 400, error);
+  if (result.affectedRows === 0) throw new AppError('Failed to accept order', 400);
 
-    await supabase.from('order_logs').insert({
-        order_id: id,
-        action: 'accept',
-        notes: '技师已接受指派',
-        operator_id: req.user.userId
-    });
+  const updatedOrder = await queryOne('SELECT * FROM orders WHERE id = ?', [id]);
 
-    successResponse(res, 'Order accepted', updatedOrder);
+  await query(
+    'INSERT INTO order_logs (order_id, action, notes, operator_id) VALUES (?, ?, ?, ?)',
+    [id, 'accept', 'Technician accepted assignment', req.user.userId]
+  );
+
+  successResponse(res, 'Order accepted', updatedOrder);
 });
 
-// [新增] 技师拒绝指派
+// 技师拒绝指派 --------------------------------------------------------
 export const rejectOrder = asyncHandler(async (req: Request, res: Response) => {
-    if (!req.user) throw new AppError('User not authenticated', 401);
-    const { id } = req.params;
+  if (!req.user) throw new AppError('User not authenticated', 401);
+  const { id } = req.params;
 
-    const { data: updatedOrder, error } = await supabase
-        .from('orders')
-        .update({ technician_id: null, status: OrderStatus.PENDING })
-        .eq('id', id)
-        .eq('technician_id', req.user.userId)
-        .eq('status', OrderStatus.PENDING_ACCEPTANCE)
-        .select()
-        .single();
+  const result: any = await query(
+    `UPDATE orders
+     SET technician_id = NULL, status = ?
+     WHERE id = ? AND technician_id = ? AND status = ?`,
+    [OrderStatus.PENDING, id, req.user.userId, OrderStatus.PENDING_ACCEPTANCE]
+  );
 
-    if (error || !updatedOrder) throw new AppError('Failed to reject order.', 400, error);
+  if (result.affectedRows === 0) throw new AppError('Failed to reject order', 400);
 
-    await supabase.from('order_logs').insert({
-        order_id: id,
-        action: 'reject',
-        notes: '技师已拒绝指派，订单返回待处理状态',
-        operator_id: req.user.userId
-    });
+  const updatedOrder = await queryOne('SELECT * FROM orders WHERE id = ?', [id]);
 
-    successResponse(res, 'Order rejected', updatedOrder);
+  await query(
+    'INSERT INTO order_logs (order_id, action, notes, operator_id) VALUES (?, ?, ?, ?)',
+    [id, 'reject', 'Technician rejected assignment; order returned to pending', req.user.userId]
+  );
+
+  successResponse(res, 'Order rejected', updatedOrder);
 });
 
-// [新增] 技师转单
+// 更新订单状态（通用入口） ---------------------------------------------
+export const updateOrderStatus = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('User not authenticated', 401);
+  const { id } = req.params;
+  const { status }: UpdateOrderStatusRequest = req.body;
+
+  if (!status) throw new AppError('Status is required', 400);
+  if (!Object.values(OrderStatus).includes(status)) {
+    throw new AppError('Invalid order status', 400);
+  }
+
+  const order = await queryOne('SELECT * FROM orders WHERE id = ?', [id]);
+  if (!order) throw new AppError('Order not found', 404);
+
+  const role = req.user.role;
+  const userId = req.user.userId;
+
+  const isOrderOwner = order.user_id === userId;
+  const isTechnicianOwner = order.technician_id === userId;
+
+  let allowed = false;
+
+  if (role === UserRole.ADMIN || role === UserRole.FINANCE) {
+    allowed = true;
+  } else if (role === UserRole.USER && isOrderOwner) {
+    allowed = status === OrderStatus.CANCELLED && ![OrderStatus.COMPLETED, OrderStatus.CANCELLED].includes(order.status);
+  } else if (role === UserRole.TECHNICIAN && isTechnicianOwner) {
+    allowed = [OrderStatus.IN_PROGRESS, OrderStatus.COMPLETED, OrderStatus.PAID].includes(status);
+  }
+
+  if (!allowed) {
+    throw new AppError('Permission denied to update order status', 403);
+  }
+
+  const result: any = await query(
+    'UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?',
+    [status, id]
+  );
+
+  if (result.affectedRows === 0) throw new AppError('Failed to update order status', 400);
+
+  await query(
+    'INSERT INTO order_logs (order_id, action, notes, operator_id) VALUES (?, ?, ?, ?)',
+    [id, 'status_change', `Order status changed to ${status}`, userId]
+  );
+
+  const updated = await queryOne('SELECT * FROM orders WHERE id = ?', [id]);
+  successResponse(res, 'Order status updated', updated);
+});
+
+// 技师转单或放弃 ------------------------------------------------------
 export const transferOrder = asyncHandler(async (req: Request, res: Response) => {
-    if (!req.user) throw new AppError('User not authenticated', 401);
-    const { id } = req.params;
-    const { newTechnicianId } = req.body;
+  if (!req.user) throw new AppError('User not authenticated', 401);
+  const { id } = req.params;
+  const { newTechnicianId } = req.body as { newTechnicianId?: string };
 
-    // 如果没有提供新的技师ID，则为放弃订单
-    if (!newTechnicianId) {
-        const { data, error } = await supabase
-            .from('orders')
-            .update({ technician_id: null, status: OrderStatus.PENDING })
-            .eq('id', id)
-            .eq('technician_id', req.user.userId)
-            .select().single();
-        if (error || !data) throw new AppError('Failed to abandon order', 400, error);
-        await supabase.from('order_logs').insert({ order_id: id, action: 'abandon', notes: '技师放弃订单，返回待处理', operator_id: req.user.userId });
-        return successResponse(res, 'Order abandoned successfully', data);
-    }
+  if (!newTechnicianId) {
+    const result: any = await query(
+      `UPDATE orders
+       SET technician_id = NULL, status = ?
+       WHERE id = ? AND technician_id = ?`,
+      [OrderStatus.PENDING, id, req.user.userId]
+    );
 
-    // 转单给其他技师
-    const { data: technician } = await supabase.from('users').select('id, name').eq('id', newTechnicianId).eq('role', UserRole.TECHNICIAN).single();
-    if (!technician) throw new AppError('Target technician not found', 404);
+    if (result.affectedRows === 0) throw new AppError('Failed to abandon order', 400);
 
-    const { data, error } = await supabase
-        .from('orders')
-        .update({ technician_id: newTechnicianId, status: OrderStatus.PENDING_ACCEPTANCE })
-        .eq('id', id)
-        .eq('technician_id', req.user.userId)
-        .select().single();
+    const data = await queryOne('SELECT * FROM orders WHERE id = ?', [id]);
+    await query(
+      'INSERT INTO order_logs (order_id, action, notes, operator_id) VALUES (?, ?, ?, ?)',
+      [id, 'abandon', 'Technician abandoned order; returned to pending', req.user.userId]
+    );
 
-    if (error || !data) throw new AppError('Failed to transfer order', 400, error);
-    await supabase.from('order_logs').insert({ order_id: id, action: 'transfer', notes: `订单已转派给技师 ${technician.name}`, operator_id: req.user.userId });
-    successResponse(res, 'Order transferred successfully', data);
+    successResponse(res, 'Order abandoned successfully', data);
+    return;
+  }
+
+  const technician = await queryOne(
+    'SELECT id, name FROM users WHERE id = ? AND role = ?',
+    [newTechnicianId, UserRole.TECHNICIAN]
+  );
+  if (!technician) throw new AppError('Target technician not found', 404);
+
+  const result: any = await query(
+    `UPDATE orders
+     SET technician_id = ?, status = ?
+     WHERE id = ? AND technician_id = ?`,
+    [newTechnicianId, OrderStatus.PENDING_ACCEPTANCE, id, req.user.userId]
+  );
+
+  if (result.affectedRows === 0) throw new AppError('Failed to transfer order', 400);
+
+  const data = await queryOne('SELECT * FROM orders WHERE id = ?', [id]);
+  await query(
+    'INSERT INTO order_logs (order_id, action, notes, operator_id) VALUES (?, ?, ?, ?)',
+    [id, 'transfer', `Order transferred to technician ${technician.name}`, req.user.userId]
+  );
+
+  successResponse(res, 'Order transferred successfully', data);
 });
 
-// [新增] 更新订单详情 (诊断, 价格)
+// 更新订单详情 --------------------------------------------------------
 export const updateOrderDetails = asyncHandler(async (req: Request, res: Response) => {
-    if (!req.user) throw new AppError('User not authenticated', 401);
-    const { id } = req.params;
-    const { diagnosis, actual_price, status } = req.body;
+  if (!req.user) throw new AppError('User not authenticated', 401);
+  const { id } = req.params;
+  const { diagnosis, actual_price, status } = req.body as { diagnosis?: string; actual_price?: number; status?: OrderStatus };
 
-    const updateData: any = {};
-    if (diagnosis) updateData.diagnosis = diagnosis;
-    if (actual_price) updateData.actual_price = actual_price;
-    if (status) updateData.status = status; // 允许同时更新状态，如完成
+  const updateFields: string[] = [];
+  const params: any[] = [];
 
-    const { data, error } = await supabase
-        .from('orders')
-        .update(updateData)
-        .eq('id', id)
-        .select().single();
+  if (diagnosis !== undefined) {
+    updateFields.push('diagnosis = ?');
+    params.push(diagnosis);
+  }
+  if (actual_price !== undefined) {
+    updateFields.push('actual_price = ?');
+    params.push(actual_price);
+  }
+  if (status !== undefined) {
+    updateFields.push('status = ?');
+    params.push(status);
+  }
 
-    if (error || !data) throw new AppError('Failed to update order details', 400, error);
-    await supabase.from('order_logs').insert({ order_id: id, action: 'update_details', notes: '订单详情已更新', operator_id: req.user.userId });
-    successResponse(res, 'Order details updated', data);
+  if (updateFields.length === 0) throw new AppError('No fields to update', 400);
+
+  params.push(id);
+
+  const result: any = await query(
+    `UPDATE orders SET ${updateFields.join(', ')} WHERE id = ?`,
+    params
+  );
+
+  if (result.affectedRows === 0) throw new AppError('Failed to update order details', 400);
+
+  const data = await queryOne('SELECT * FROM orders WHERE id = ?', [id]);
+  await query(
+    'INSERT INTO order_logs (order_id, action, notes, operator_id) VALUES (?, ?, ?, ?)',
+    [id, 'update_details', 'Order details updated', req.user.userId]
+  );
+
+  successResponse(res, 'Order details updated', data);
 });
 
-// [新增] 添加维修日志
+// 添加维修日志 --------------------------------------------------------
 export const addOrderLog = asyncHandler(async (req: Request, res: Response) => {
-    if (!req.user) throw new AppError('User not authenticated', 401);
-    const { id } = req.params;
-    const { notes, images } = req.body;
+  if (!req.user) throw new AppError('User not authenticated', 401);
+  const { id } = req.params;
+  const { notes, images } = req.body as { notes: string; images?: string[] };
 
-    if (!notes || notes.trim().length < 1) throw new AppError('Log notes cannot be empty', 400);
+  if (!notes || notes.trim().length === 0) {
+    throw new AppError('Log notes cannot be empty', 400);
+  }
 
-    const { data, error } = await supabase
-        .from('order_logs')
-        .insert({
-            order_id: id,
-            action: 'log',
-            notes,
-            images: images || [],
-            operator_id: req.user.userId
-        }).select().single();
+  await query(
+    `INSERT INTO order_logs (order_id, action, notes, images, operator_id)
+     VALUES (?, ?, ?, ?, ?)`,
+    [id, 'log', notes, JSON.stringify(images || []), req.user.userId]
+  );
 
-    if (error || !data) throw new AppError('Failed to add order log', 400, error);
-    successResponse(res, 'Log added successfully', data, 201);
+  const data = await queryOne(
+    `SELECT ol.*, u.name AS operator_name
+     FROM order_logs ol
+     LEFT JOIN users u ON ol.operator_id = u.id
+     WHERE ol.order_id = ? AND ol.operator_id = ?
+     ORDER BY ol.created_at DESC
+     LIMIT 1`,
+    [id, req.user.userId]
+  );
+
+  successResponse(res, 'Log added successfully', data, 201);
 });
+
+
